@@ -134,6 +134,37 @@ S(edge_a, edge_b, type)
 S(P1.right, P2.left, french)   — french seam joining panel 1 right edge to panel 2 left edge
 ```
 
+### 4.4 Edge `EDGE`
+
+Defines a shaped (curved) edge on a panel. This is how princess seams and other structural curves are expressed — the shaping lives in the panel edge geometry, not in a dart or gather operator.
+
+```
+EDGE(panel.edge, curve(landmark, curvature))
+```
+
+- **panel.edge**: which edge of which panel (`front_side.inner`, `front_center.outer`, etc.)
+- **curve**: a curve definition with a target landmark and curvature amount
+  - **landmark**: the body point the curve passes through or shapes around
+  - **curvature**: how far the edge deviates from straight, in cm (positive = outward, negative = inward)
+
+```
+EDGE(front_side.inner, curve(@bust.L, 3cm))     — princess seam: side panel curves out 3cm at bust
+EDGE(front_center.outer, curve(@bust.L, -3cm))   — center panel curves in to match
+```
+
+When two panels with complementary EDGE curves are joined by a seam, the result is 3D shaping without darts. This is the mechanism behind princess seams, shaped yokes, and contoured waistbands.
+
+```
+-- Princess seam replacing a bust dart:
+front_center = P(%torso.front.L[0..0.5], contour, 1.0)
+front_side   = P(%torso.front.L[0.5..1], contour, 1.0)
+
+EDGE(front_center.side, curve(@bust.L, -3cm))
+EDGE(front_side.center, curve(@bust.L, 3cm))
+
+S(front_center.side, front_side.center, plain)   — princess seam
+```
+
 ---
 
 ## 5. Operators (Transformations)
@@ -384,6 +415,8 @@ COMPONENT notched_lapel {
 | `[]`   | Region subdivision   | `%arm[0..0.5]`                   |
 | `USE`  | Instantiate component| `sleeve = USE(two_piece_sleeve)` |
 | `ATTACH`| Attach component    | `ATTACH(sleeve, armhole)`        |
+| `EDGE` | Shaped panel edge    | `EDGE(P.side, curve(@bust, 3cm))`|
+| `LAYER`| Internal lining      | `LAYER lining { ... }`           |
 
 ---
 
@@ -458,7 +491,64 @@ GARMENT blazer [SYM] {
 
 ---
 
-## 11. Extensions (future)
+## 11. Lining (`LAYER`)
+
+A lining is not a component (attached at one point) or a separate garment (worn over). It's a parallel structure that shares some edges with the shell and floats free at others. GNL handles this with `LAYER`.
+
+```
+LAYER(name, fabric) {
+  panels...
+
+  SHARE: [edges that are sewn to the shell]
+  FREE: [edges that hang independently]
+
+  BUILD: ...
+}
+```
+
+### Example: Lined Jacket
+
+```
+GARMENT jacket [SYM] {
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+
+  front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back  = P(%torso.back + %leg[0..0.1], contour, 1.08)
+
+  sleeve = USE(two_piece_sleeve)
+  collar = USE(notched_lapel)
+
+  LAYER lining {
+    FABRIC: M(80gsm, liquid, none, 0.9, woven.satin)
+
+    front = P(%torso.front + %leg[0..0.08], contour, 1.12)
+    back  = P(%torso.back + %leg[0..0.08], contour, 1.1)
+    sleeve = P(%arm[0..0.65], contour, 1.12)
+
+    SHARE: front.facing, hem, armhole
+    FREE: body, side
+
+    BUILD:
+      S(front.shoulder, back.shoulder, plain)
+      >> S(front.side, back.side, plain)
+      >> S(sleeve.cap, {front.armhole, back.armhole}, plain)
+  }
+
+  BUILD:
+    ...shell assembly...
+    >> ATTACH_LAYER(lining)
+}
+```
+
+- `SHARE` edges are sewn to the corresponding shell edges — the lining is caught at facings, hems, and armholes
+- `FREE` edges hang independently — the lining body floats inside the jacket
+- The lining's own `BUILD` order runs first, then `ATTACH_LAYER` connects it to the shell
+
+> This is distinct from `OVER(garment_a, garment_b)` in the extensions section, which describes separate garments worn together. `LAYER` is a structural part of a single garment.
+
+---
+
+## 13. Extensions (future)
 
 - **Layering**: `OVER(garment_a, garment_b)` — describing how garments interact when worn together
 - **Animation / Movement**: coupling with Labanotation to describe how garments behave in motion
@@ -470,7 +560,7 @@ GARMENT blazer [SYM] {
 
 ---
 
-## 12. Comparison to Existing Systems
+## 14. Comparison to Existing Systems
 
 | System          | Classifies | Generates | Encodes construction | Formal grammar |
 |-----------------|:----------:|:---------:|:-------------------:|:--------------:|

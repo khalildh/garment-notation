@@ -68,10 +68,15 @@ function update() {
     const svg = currentView === 'assembled' ? assemble(ast) : render(ast);
     viewer.innerHTML = svg;
 
-    const block = ast.blocks[0];
-    const panels = block?.declarations.filter(d => d.value.type === 'call' && d.value.name === 'P').length ?? 0;
-    const steps = block?.build.length ?? 0;
-    status.textContent = `Parsed: ${panels} panel${panels !== 1 ? 's' : ''}, ${steps} build step${steps !== 1 ? 's' : ''}`;
+    const mainBlock = ast.blocks.find(b => b.type === 'garment') || ast.blocks[0];
+    const panels = mainBlock?.declarations.filter(d => d.value.type === 'call' && d.value.name === 'P').length ?? 0;
+    const steps = mainBlock?.build.length ?? 0;
+    const edgeCount = mainBlock?.edges?.length ?? 0;
+    const layerCount = mainBlock?.layers?.length ?? 0;
+    let statusText = `Parsed: ${panels} panel${panels !== 1 ? 's' : ''}, ${steps} build step${steps !== 1 ? 's' : ''}`;
+    if (edgeCount > 0) statusText += `, ${edgeCount} edge${edgeCount !== 1 ? 's' : ''}`;
+    if (layerCount > 0) statusText += `, ${layerCount} layer${layerCount !== 1 ? 's' : ''}`;
+    status.textContent = statusText;
     status.className = 'status ok';
   } catch (err) {
     status.textContent = err.message;
@@ -286,5 +291,52 @@ GARMENT blazer [SYM] {
     >> ATTACH(pocket_L, front.pocket_mark.L)
     >> C(front_opening, button(2), center)
     >> F(front.bottom, 3cm, in)
+}`,
+  fitted_dress: `GARMENT fitted_dress [SYM] {
+
+  FABRIC: M(200gsm, crisp, none, 1.0, woven.plain)
+
+  -- Princess seam panels (split front and back at bust/shoulder)
+  front_center = P(%torso.front.L[0..0.5] + %leg.L[0..0.3], contour, 1.0)
+  front_side   = P(%torso.front.L[0.5..1] + %leg.L[0..0.3], contour, 1.0)
+  back_center  = P(%torso.back.L[0..0.5] + %leg.L[0..0.3], contour, 1.0)
+  back_side    = P(%torso.back.L[0.5..1] + %leg.L[0..0.3], contour, 1.0)
+
+  -- Shape the princess seam edges
+  EDGE(front_center.side, curve(@bust.L, -3cm))
+  EDGE(front_side.center, curve(@bust.L, 3cm))
+  EDGE(back_center.side, curve(@shoulder.L, -2cm))
+  EDGE(back_side.center, curve(@shoulder.L, 2cm))
+
+  -- Openings
+  neck   = O(@neck, circle, body+2cm)
+  hem    = O(@knee, circle, body+4cm)
+  zipper = O(%torso.back, slit, @neck)
+
+  -- Lining
+  LAYER lining {
+    FABRIC: M(80gsm, liquid, none, 0.9, woven.satin)
+
+    front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+    back  = P(%torso.back + %leg[0..0.1], contour, 1.1)
+
+    SHARE: [front.armhole, back.armhole, front.neck, back.neck]
+    FREE: [front.side, back.side, front.bottom, back.bottom]
+
+    BUILD:
+      S(front.shoulder, back.shoulder, plain)
+      >> S(front.side, back.side, plain)
+  }
+
+  BUILD:
+    S(front_center.side, front_side.center, plain)
+    >> S(back_center.side, back_side.center, plain)
+    >> S(front_center.shoulder, back_center.shoulder, plain)
+    >> S(front_side.shoulder, back_side.shoulder, plain)
+    >> S(front_side.side, back_side.side, plain)
+    >> F(neck, 1cm, in)
+    >> F(hem, 3cm, in)
+    >> C(zipper, invisible, center_back)
+    >> ATTACH_LAYER(lining)
 }`,
 };

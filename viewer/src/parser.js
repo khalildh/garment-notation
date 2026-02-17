@@ -54,6 +54,8 @@ export function parse(tokens) {
     let interlining = null;
     const declarations = [];
     const build = [];
+    const edges = [];
+    const layers = [];
 
     while (!check('RBRACE') && !check('EOF')) {
       if (check('IDENT', 'FABRIC')) {
@@ -65,11 +67,59 @@ export function parse(tokens) {
       } else if (check('IDENT', 'BUILD')) {
         advance(); expect('COLON');
         build.push(...parseBuildChain());
+      } else if (check('IDENT', 'EDGE') && tokens[pos + 1]?.type === 'LPAREN') {
+        // Standalone EDGE(...) call
+        edges.push(parseExpr());
+      } else if (check('IDENT', 'LAYER')) {
+        layers.push(parseLayer());
       } else {
         declarations.push(parseDeclaration());
       }
     }
-    return { fabric, interlining, declarations, build };
+    return { fabric, interlining, declarations, build, edges, layers };
+  }
+
+  function parseLayer() {
+    advance(); // skip LAYER
+    const name = expect('IDENT');
+    expect('LBRACE');
+
+    let fabric = null;
+    const declarations = [];
+    const build = [];
+    let share = [];
+    let free = [];
+
+    while (!check('RBRACE') && !check('EOF')) {
+      if (check('IDENT', 'FABRIC')) {
+        advance(); expect('COLON');
+        fabric = parseExpr();
+      } else if (check('IDENT', 'SHARE')) {
+        advance(); expect('COLON');
+        expect('LBRACKET');
+        while (!check('RBRACKET') && !check('EOF')) {
+          share.push(parseExpr());
+          match('COMMA');
+        }
+        expect('RBRACKET');
+      } else if (check('IDENT', 'FREE')) {
+        advance(); expect('COLON');
+        expect('LBRACKET');
+        while (!check('RBRACKET') && !check('EOF')) {
+          free.push(parseExpr());
+          match('COMMA');
+        }
+        expect('RBRACKET');
+      } else if (check('IDENT', 'BUILD')) {
+        advance(); expect('COLON');
+        build.push(...parseBuildChain());
+      } else {
+        declarations.push(parseDeclaration());
+      }
+    }
+    expect('RBRACE');
+
+    return { type: 'layer', name: name.value, fabric, declarations, build, share, free };
   }
 
   function parseDeclaration() {
@@ -120,6 +170,16 @@ export function parse(tokens) {
 
   function parseAtom() {
     const tok = peek();
+
+    // Unary minus
+    if (tok.type === 'MINUS') {
+      advance();
+      const inner = parseAtom();
+      if (inner.type === 'number') {
+        return { ...inner, value: -inner.value };
+      }
+      return { type: 'binary', op: '*', left: { type: 'number', value: -1 }, right: inner };
+    }
 
     if (tok.type === 'NUMBER') {
       advance();

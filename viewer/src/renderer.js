@@ -26,6 +26,9 @@ export function render(ast) {
 
   const darts = extractDarts(resolved);
   const openings = extractOpenings(resolved);
+  const edges = extractEdges(resolved);
+  const liningPanels = extractLiningPanels(resolved);
+  const allPanels = [...panels, ...liningPanels];
 
   // Apply darts to panels
   for (const d of darts) {
@@ -33,8 +36,14 @@ export function render(ast) {
     if (panel) panel.darts.push(d);
   }
 
+  // Apply edge definitions to panels
+  for (const e of edges) {
+    const panel = allPanels.find(p => p.name === e.panel);
+    if (panel) panel.edges.push(e);
+  }
+
   // Layout panels in rows
-  const positioned = layoutPanels(panels);
+  const positioned = layoutPanels(allPanels);
   const totalW = positioned.totalWidth + MARGIN * 2;
   const totalH = positioned.totalHeight + MARGIN * 2 + 50; // extra for info
 
@@ -53,68 +62,119 @@ export function render(ast) {
   // Info line
   const infoY = totalH - 16;
   const fabricStr = block.fabric ? summarizeFabric(block.fabric) : '';
-  const info = `${panels.length} panel${panels.length !== 1 ? 's' : ''}${openings.length ? ` · ${openings.length} opening${openings.length !== 1 ? 's' : ''}` : ''}${block.build.length ? ` · ${block.build.length} build step${block.build.length !== 1 ? 's' : ''}` : ''}${fabricStr ? ` · ${fabricStr}` : ''}`;
+  const edgeInfo = edges.length ? ` · ${edges.length} edge${edges.length !== 1 ? 's' : ''}` : '';
+  const layerInfo = liningPanels.length ? ` · lining (${liningPanels.length} panels)` : '';
+  const info = `${panels.length} panel${panels.length !== 1 ? 's' : ''}${openings.length ? ` · ${openings.length} opening${openings.length !== 1 ? 's' : ''}` : ''}${block.build.length ? ` · ${block.build.length} build step${block.build.length !== 1 ? 's' : ''}` : ''}${edgeInfo}${layerInfo}${fabricStr ? ` · ${fabricStr}` : ''}`;
   svg += `<text x="${totalW / 2}" y="${infoY}" text-anchor="middle" fill="${DIM_COLOR}" font-size="11" font-family="system-ui">${info}</text>`;
 
   svg += '</svg>';
   return svg;
 }
 
+function extractPanelFromDecl(decl) {
+  const args = decl.value.args;
+  const regionExpr = args[0];
+  const shapeExpr = args[1];
+  const easeExpr = args[2];
+  const grainExpr = args[3];
+
+  const dims = resolveRegionDims(regionExpr);
+  const shape = resolveShape(shapeExpr);
+  const regionName = resolveRegionName(regionExpr);
+
+  // Handle ease(top, bottom) or single scalar
+  let easeTop, easeBottom;
+  if (easeExpr?.type === 'call' && easeExpr.name === 'ease') {
+    easeTop = resolveNumber(easeExpr.args[0]) ?? 1.0;
+    easeBottom = resolveNumber(easeExpr.args[1]) ?? easeTop;
+  } else {
+    const e = resolveNumber(easeExpr) ?? 1.0;
+    easeTop = e;
+    easeBottom = e;
+  }
+
+  // Handle grain parameter (positional or named)
+  let grain = 'warp';
+  const grainArg = grainExpr || args.find(a => a.type === 'named_arg' && a.name === 'grain');
+  if (grainArg) {
+    if (grainArg.type === 'named_arg') {
+      grain = resolveRef(grainArg.value) || 'warp';
+    } else if (grainArg.type === 'reference') {
+      grain = grainArg.value;
+    } else if (grainArg.type === 'number' && grainArg.unit === 'deg') {
+      grain = grainArg.value + '°';
+    }
+  }
+
+  return {
+    name: decl.name,
+    region: regionName,
+    shape,
+    ease: easeTop,
+    easeTop,
+    easeBottom,
+    grain,
+    widthTop: dims.widthTop * easeTop,
+    widthBottom: dims.widthBottom * easeBottom,
+    height: dims.height,
+    darts: [],
+    edges: [],
+    isLining: false,
+    shapeParams: shapeExpr?.type === 'call' ? shapeExpr : null,
+  };
+}
+
 function extractPanels(block) {
   const panels = [];
   for (const decl of block.declarations) {
     if (decl.value.type === 'call' && decl.value.name === 'P') {
-      const args = decl.value.args;
-      const regionExpr = args[0];
-      const shapeExpr = args[1];
-      const easeExpr = args[2];
-      const grainExpr = args[3];
-
-      const dims = resolveRegionDims(regionExpr);
-      const shape = resolveShape(shapeExpr);
-      const regionName = resolveRegionName(regionExpr);
-
-      // Handle ease(top, bottom) or single scalar
-      let easeTop, easeBottom;
-      if (easeExpr?.type === 'call' && easeExpr.name === 'ease') {
-        easeTop = resolveNumber(easeExpr.args[0]) ?? 1.0;
-        easeBottom = resolveNumber(easeExpr.args[1]) ?? easeTop;
-      } else {
-        const e = resolveNumber(easeExpr) ?? 1.0;
-        easeTop = e;
-        easeBottom = e;
-      }
-
-      // Handle grain parameter (positional or named)
-      let grain = 'warp';
-      const grainArg = grainExpr || args.find(a => a.type === 'named_arg' && a.name === 'grain');
-      if (grainArg) {
-        if (grainArg.type === 'named_arg') {
-          grain = resolveRef(grainArg.value) || 'warp';
-        } else if (grainArg.type === 'reference') {
-          grain = grainArg.value;
-        } else if (grainArg.type === 'number' && grainArg.unit === 'deg') {
-          grain = grainArg.value + '°';
-        }
-      }
-
-      panels.push({
-        name: decl.name,
-        region: regionName,
-        shape,
-        ease: easeTop,
-        easeTop,
-        easeBottom,
-        grain,
-        widthTop: dims.widthTop * easeTop,
-        widthBottom: dims.widthBottom * easeBottom,
-        height: dims.height,
-        darts: [],
-        shapeParams: shapeExpr?.type === 'call' ? shapeExpr : null,
-      });
+      panels.push(extractPanelFromDecl(decl));
     }
   }
   return panels;
+}
+
+function extractLiningPanels(block) {
+  const panels = [];
+  if (!block.layers) return panels;
+  for (const layer of block.layers) {
+    for (const decl of layer.declarations) {
+      if (decl.value.type === 'call' && decl.value.name === 'P') {
+        const panel = extractPanelFromDecl({
+          ...decl,
+          name: 'lining.' + decl.name,
+        });
+        panel.isLining = true;
+        panel.layerName = layer.name;
+        panels.push(panel);
+      }
+    }
+  }
+  return panels;
+}
+
+function extractEdges(block) {
+  const edges = [];
+  if (!block.edges) return edges;
+  for (const edge of block.edges) {
+    if (edge.type === 'call' && edge.name === 'EDGE') {
+      const targetRef = resolveRef(edge.args[0]);
+      const curveExpr = edge.args[1];
+      const parts = targetRef.split('.');
+      const panel = parts[0];
+      const edgeName = parts.slice(1).join('.');
+
+      let curvature = 0;
+      let landmark = '';
+      if (curveExpr?.type === 'call' && curveExpr.name === 'curve') {
+        landmark = curveExpr.args[0]?.value?.replace(/^@/, '') || '';
+        curvature = resolveNumber(curveExpr.args[1]) ?? 0;
+      }
+
+      edges.push({ panel, edge: edgeName, landmark, curvature });
+    }
+  }
+  return edges;
 }
 
 function extractDarts(block) {
@@ -245,9 +305,15 @@ function layoutPanels(panels) {
 
 // --- Drawing ---
 
+const LINING_COLOR = '#e8e0f0';
+const LINING_STROKE = '#8b7fa8';
+const EDGE_CURVE_COLOR = '#e11d48';
+
 function renderPanel(p) {
   const w = p.w, h = p.h;
-  const fill = COLORS[p.name] || DEFAULT_COLOR;
+  const isLining = p.isLining;
+  const fill = isLining ? LINING_COLOR : (COLORS[p.name] || DEFAULT_COLOR);
+  const stroke = isLining ? LINING_STROKE : STROKE;
   const path = panelPath(p);
 
   let g = `<g transform="translate(${p.x}, ${p.y})">`;
@@ -256,7 +322,25 @@ function renderPanel(p) {
   g += `<g transform="translate(2, 2)" opacity="0.08">${pathEl(path, '#000', '#000')}</g>`;
 
   // Panel shape
-  g += pathEl(path, fill, STROKE);
+  g += pathEl(path, fill, stroke);
+
+  // Lining cross-hatch pattern
+  if (isLining) {
+    const clipId = 'clip-' + p.name.replace(/\./g, '-');
+    g += `<defs><clipPath id="${clipId}"><path d="${path}"/></clipPath></defs>`;
+    g += `<g clip-path="url(#${clipId})" opacity="0.15">`;
+    for (let i = -h; i < w + h; i += 8) {
+      g += `<line x1="${i}" y1="0" x2="${i + h}" y2="${h}" stroke="${LINING_STROKE}" stroke-width="0.5"/>`;
+    }
+    g += '</g>';
+  }
+
+  // Edge curves (princess seam indicators)
+  if (p.edges && p.edges.length > 0) {
+    for (const e of p.edges) {
+      g += edgeCurveMark(w, h, e);
+    }
+  }
 
   // Grain line
   g += grainLine(w, h, p.grain);
@@ -267,7 +351,8 @@ function renderPanel(p) {
   }
 
   // Label
-  g += `<text x="${w / 2}" y="${h / 2 - 6}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="12" font-weight="600" font-family="system-ui">${p.name}</text>`;
+  const displayName = p.name.length > 16 ? p.name.split('.').pop() : p.name;
+  g += `<text x="${w / 2}" y="${h / 2 - 6}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="${isLining ? 10 : 12}" font-weight="600" font-family="system-ui">${displayName}</text>`;
 
   // Dimensions
   const widthCm = Math.max(p.widthTop, p.widthBottom) * p.ease;
@@ -276,10 +361,43 @@ function renderPanel(p) {
   // Shape + ease + grain label
   const easeLabel = p.easeTop === p.easeBottom ? `ease ${p.easeTop}` : `ease ${p.easeTop}→${p.easeBottom}`;
   const grainLabel = p.grain !== 'warp' ? ` · ${p.grain}` : '';
-  g += `<text x="${w / 2}" y="${h / 2 + 22}" text-anchor="middle" fill="${DIM_COLOR}" font-size="8" font-family="system-ui">${p.shape} · ${easeLabel}${grainLabel}</text>`;
+  const liningLabel = isLining ? ' · lining' : '';
+  const edgeLabel = (p.edges?.length > 0) ? ' · shaped' : '';
+  g += `<text x="${w / 2}" y="${h / 2 + 22}" text-anchor="middle" fill="${DIM_COLOR}" font-size="8" font-family="system-ui">${p.shape} · ${easeLabel}${grainLabel}${liningLabel}${edgeLabel}</text>`;
 
   g += '</g>';
   return g;
+}
+
+function edgeCurveMark(w, h, edge) {
+  // Draw a curved line on the panel edge to indicate princess seam shaping
+  const curvature = Math.abs(edge.curvature) * SCALE;
+  const isInward = edge.curvature < 0;
+  const edgeName = edge.edge;
+
+  // Determine which side of the panel the edge is on
+  let x, y1, y2, cx;
+  if (edgeName.includes('side') || edgeName.includes('outer') || edgeName.includes('right')) {
+    x = w;
+    y1 = h * 0.1;
+    y2 = h * 0.9;
+    cx = isInward ? x - curvature : x + curvature;
+  } else if (edgeName.includes('center') || edgeName.includes('inner') || edgeName.includes('left')) {
+    x = 0;
+    y1 = h * 0.1;
+    y2 = h * 0.9;
+    cx = isInward ? x + curvature : x - curvature;
+  } else {
+    // Default: right side
+    x = w;
+    y1 = h * 0.1;
+    y2 = h * 0.9;
+    cx = isInward ? x - curvature : x + curvature;
+  }
+
+  const cy = (y1 + y2) / 2;
+
+  return `<path d="M ${x},${y1} Q ${cx},${cy} ${x},${y2}" fill="none" stroke="${EDGE_CURVE_COLOR}" stroke-width="1.5" stroke-dasharray="4,2"/>`;
 }
 
 function panelPath(p) {
@@ -421,7 +539,7 @@ function resolveComponents(block, ast) {
     }
   }
 
-  return { ...block, declarations: expanded, build: expandedBuild };
+  return { ...block, declarations: expanded, build: expandedBuild, edges: block.edges || [], layers: block.layers || [] };
 }
 
 function fmtCm(v) { return v.toFixed(1) + 'cm'; }

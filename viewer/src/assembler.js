@@ -11,19 +11,53 @@ const LABEL_COLOR = '#1e293b';
 const DIM_COLOR = '#64748b';
 const STITCH_COLOR = '#94a3b8';
 
+const PRINCESS_COLOR = '#e11d48';
+
 export function assemble(ast) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
   const block = resolveMain(ast);
   const resolved = resolveComponents(block, ast);
   const panels = extractPanelInfo(resolved);
   const garmentType = detectGarmentType(panels, resolved);
+  const edges = extractEdgeInfo(resolved);
+  const hasLining = hasLayerInfo(resolved);
 
   switch (garmentType) {
-    case 'top': return drawTop(resolved, panels);
-    case 'skirt': return drawSkirt(resolved, panels);
+    case 'top': return drawTop(resolved, panels, edges, hasLining);
+    case 'skirt': return drawSkirt(resolved, panels, edges, hasLining);
     case 'collar': return drawCollar(resolved, panels);
-    default: return drawGeneric(resolved, panels);
+    default: return drawGeneric(resolved, panels, edges, hasLining);
   }
+}
+
+function extractEdgeInfo(block) {
+  const edges = [];
+  if (!block.edges) return edges;
+  for (const edge of block.edges) {
+    if (edge.type === 'call' && edge.name === 'EDGE') {
+      const ref = resolveRef(edge.args[0]);
+      const curveExpr = edge.args[1];
+      const parts = ref.split('.');
+      const panel = parts[0];
+      const edgeName = parts.slice(1).join('.');
+      let curvature = 0;
+      if (curveExpr?.type === 'call' && curveExpr.name === 'curve') {
+        curvature = resolveNumberDeep(curveExpr.args[1]) ?? 0;
+      }
+      edges.push({ panel, edge: edgeName, curvature });
+    }
+  }
+  return edges;
+}
+
+function hasLayerInfo(block) {
+  return block.layers && block.layers.length > 0;
+}
+
+function resolveNumberDeep(expr) {
+  if (!expr) return null;
+  if (expr.type === 'number') return expr.value;
+  return null;
 }
 
 function extractPanelInfo(block) {
@@ -60,7 +94,7 @@ function detectGarmentType(panels, block) {
 
 // --- Top (t-shirt, blouse, jacket body) ---
 
-function drawTop(block, panels) {
+function drawTop(block, panels, edges = [], hasLining = false) {
   const front = panels.front || panels.front_L || Object.values(panels).find(p => p.region.includes('torso.front'));
   const back = panels.back || Object.values(panels).find(p => p.region.includes('torso.back'));
   const sleeve = panels.sleeve || panels.sleeve_L || Object.values(panels).find(p => p.region.includes('arm'));
@@ -144,7 +178,8 @@ function drawTop(block, panels) {
   // Detect features
   const hasCollar = Object.keys(panels).some(n => n.includes('collar') || n.includes('lapel'));
   const hasWelt = Object.keys(panels).some(n => n.includes('welt') || n.includes('pocket'));
-  const hasLining = Object.keys(panels).some(n => n.includes('lining'));
+  const hasPrincessSeams = edges.length > 0;
+  const isLined = hasLining || Object.keys(panels).some(n => n.includes('lining'));
   const hasButtons = block.build.some(s => {
     const op = s.operation;
     return op?.type === 'call' && op.name === 'C' && op.args?.some(a => a.type === 'call' && a.name === 'button');
@@ -233,10 +268,41 @@ function drawTop(block, panels) {
   svg += `<line x1="${bx + 4}" y1="${hemY}" x2="${bx + bw - 4}" y2="${hemY}"
     stroke="${STITCH_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>`;
 
+  // Princess seam lines
+  if (hasPrincessSeams) {
+    // Draw curved princess seam lines on the body
+    const seamX1 = cx - bw * 0.22;
+    const seamX2 = cx + bw * 0.22;
+    const seamY1 = topY + shoulderSlope * SCALE;
+    const seamY2 = topY + bh;
+    const curve = bw * 0.06;
+    const bustY = topY + bh * 0.28;
+
+    // Left princess seam
+    svg += `<path d="M ${seamX1},${seamY1} Q ${seamX1 - curve},${bustY} ${seamX1},${seamY2}" fill="none" stroke="${PRINCESS_COLOR}" stroke-width="1.2" stroke-dasharray="5,3"/>`;
+    // Right princess seam
+    svg += `<path d="M ${seamX2},${seamY1} Q ${seamX2 + curve},${bustY} ${seamX2},${seamY2}" fill="none" stroke="${PRINCESS_COLOR}" stroke-width="1.2" stroke-dasharray="5,3"/>`;
+  }
+
+  // Lining indicator
+  if (isLined) {
+    // Subtle fill pattern to indicate lining
+    const liningInset = 6;
+    svg += `<path d="
+      M ${cx - bw / 2 + liningInset},${topY + bh * 0.8}
+      L ${cx + bw / 2 - liningInset},${topY + bh * 0.8}
+      L ${cx + bw / 2 - liningInset},${topY + bh - liningInset}
+      L ${cx - bw / 2 + liningInset},${topY + bh - liningInset}
+      Z
+    " fill="none" stroke="#8b7fa8" stroke-width="0.6" stroke-dasharray="2,2" opacity="0.5"/>`;
+    svg += `<text x="${cx}" y="${topY + bh - liningInset - 4}" text-anchor="middle" fill="#8b7fa8" font-size="7" font-family="system-ui" opacity="0.7">LINING</text>`;
+  }
+
   // Labels
   const labelParts = [];
   if (hasCollar) labelParts.push('notched lapel');
-  if (hasLining) labelParts.push('lined');
+  if (isLined) labelParts.push('lined');
+  if (hasPrincessSeams) labelParts.push('princess seams');
   if (hasWelt) labelParts.push('welt pockets');
   const detailLabel = labelParts.length ? labelParts.join(' · ') : '';
 
@@ -261,7 +327,7 @@ function drawTop(block, panels) {
 
 // --- Skirt ---
 
-function drawSkirt(block, panels) {
+function drawSkirt(block, panels, edges = [], hasLining = false) {
   const panelList = Object.entries(panels);
   const mainPanels = panelList.filter(([n, p]) => !n.includes('waistband') && !n.includes('band'));
   const waistband = panelList.find(([n]) => n.includes('waistband') || n.includes('band'));
@@ -408,8 +474,8 @@ function drawCollar(block, panels) {
 
 // --- Generic fallback ---
 
-function drawGeneric(block, panels) {
-  return drawTop(block, panels);
+function drawGeneric(block, panels, edges = [], hasLining = false) {
+  return drawTop(block, panels, edges, hasLining);
 }
 
 // --- Helpers ---
@@ -518,7 +584,7 @@ function resolveComponents(block, ast) {
     }
   }
 
-  return { ...block, declarations: expanded, build: expandedBuild };
+  return { ...block, declarations: expanded, build: expandedBuild, edges: block.edges || [], layers: block.layers || [] };
 }
 
 function resolveRef(expr) {
