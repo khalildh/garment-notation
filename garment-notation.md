@@ -375,7 +375,7 @@ COMPONENT notched_lapel {
 | `G`    | Gather               | `G(P.top, 1.5)`                 |
 | `PL`   | Pleat                | `PL(P.top, box, 3cm, 8, center)`|
 | `F`    | Fold / Hem           | `F(P.bottom, 2cm, in)`          |
-| `DR`   | Drape                | `DR(P, [@shoulder.L], 45°)`     |
+| `DR`   | Drape                | `DR(P, [@shoulder.L])`          |
 | `ST`   | Stretch              | `ST(P, biaxial, 1.2)`           |
 | `C`    | Closure              | `C(O, zip(invisible), center)`  |
 | `M`    | Material             | `M(200gsm, fluid, none, ...)`   |
