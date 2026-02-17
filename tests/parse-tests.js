@@ -1,63 +1,154 @@
-import { tokenize } from './tokenizer.js';
-import { parse as legacyParse } from './parser.js';
-import { parse as pegParse } from './gnl-parser.js';
-import { pegAstToLegacy } from './peg-adapter.js';
-import { render } from './renderer.js';
-import { assemble } from './assembler.js';
-import { convert } from '../../converter/korosteleva-to-gnl.js';
-import { KOROSTELEVA_TEMPLATES } from './korosteleva-examples.js';
+import { parse } from '../viewer/src/gnl-parser.js';
+import { pegAstToLegacy } from '../viewer/src/peg-adapter.js';
 
-/**
- * Parse GNL source: try PEG parser first, fall back to legacy.
- * @param {string} source
- * @returns {{ type: 'program', blocks: any[] }}
- */
-function parse(source) {
-  try {
-    const pegAst = pegParse(source);
-    return pegAstToLegacy(pegAst);
-  } catch {
-    const tokens = tokenize(source);
-    return legacyParse(tokens);
-  }
+// ============================================================================
+// Test GNL programs extracted from gnl_tests.peg and viewer/src/app.js
+// ============================================================================
+
+const TESTS = {};
+
+// ---------------------------------------------------------------------------
+// From gnl_tests.peg
+// ---------------------------------------------------------------------------
+
+TESTS["test1_tank_top"] = `GARMENT tank_top [SYM] {
+
+  FABRIC: M(120gsm, fluid, biaxial:15%, 0.9, knit.jersey)
+
+  front = P(%torso.front, contour, 1.1)
+  back  = P(%torso.back, contour, 1.1)
+
+  neck = O(@neck, circle, body+2cm)
+  hem  = O(@hip, circle, body+6cm)
+
+  BUILD:
+    S(front.shoulder, back.shoulder, serged)
+    >> S(front.side, back.side, serged)
+    >> F(neck, 1cm, in)
+    >> F(hem, 2cm, in)
+}`;
+
+TESTS["test2_flared_skirt"] = `GARMENT flared_skirt {
+
+  FABRIC: M(180gsm, fluid, none, 1.0, woven.plain)
+
+  front = P(%torso.front + %leg.L[0..0.3], trapezoid(waist=0.5W, hem=1.5W), ease(1.0, 2.0))
+  back  = P(%torso.back + %leg.R[0..0.3], trapezoid(waist=0.5W, hem=1.5W), ease(1.0, 2.0))
+
+  waist = O(@waist, circle, body+2cm)
+
+  BUILD:
+    S(front.side.L, back.side.L, french)
+    >> S(front.side.R, back.side.R, french)
+    >> G(front.top, 1.1)
+    >> C(waist, zip(invisible), center)
+    >> F(front.bottom, 1.5cm, in)
+}`;
+
+TESTS["test3_draped_camisole"] = `GARMENT draped_camisole [SYM] {
+
+  FABRIC: M(90gsm, liquid, none, 0.7, woven.satin)
+
+  front = P(%torso.front, contour, 1.3, bias)
+  back  = P(%torso.back, contour, 1.1)
+
+  neck = O(@neck, V, depth=12cm)
+
+  BUILD:
+    DR(front, [@shoulder.L, @shoulder.R])
+    >> S(front.side, back.side, french)
+    >> F(neck, 0.5cm, in)
+}`;
+
+TESTS["test4_component_blouse"] = `COMPONENT set_in_sleeve {
+  cap   = P(%arm[0..0.6], contour, 1.15)
+  under = P(%arm[0..0.6], contour, 1.05)
+  cuff  = O(@elbow, circle, body+3cm)
+
+  BUILD:
+    S(cap.back, under.back, serged)
+    >> S(cap.front, under.front, serged)
+    >> F(cuff, 2cm, in)
 }
 
-const editor = document.getElementById('editor');
-const sourceToggle = document.getElementById('source-toggle');
-const srcBtns = document.querySelectorAll('.src-btn');
-const viewer = document.getElementById('viewer');
-const status = document.getElementById('status');
-const viewBtns = document.querySelectorAll('.view-btn[data-view]');
+GARMENT blouse [SYM] {
 
-let currentView = 'assembled';
-let bodyOverlayOn = false;
-let bodyOverlayMode = 'silhouette'; // 'silhouette' | 'regions'
-let activeJsonSource = null; // raw JSON string when a Korosteleva template is active
-let activeGnlSource = null;  // converted GNL string (saved when switching to JSON view)
-let currentSrcMode = 'gnl';  // 'gnl' or 'json'
+  FABRIC: M(110gsm, fluid, none, 0.8, woven.plain)
 
-// Body overlay controls
-const bodyToggleBtn = document.getElementById('body-toggle');
-const bodyModeToggle = document.getElementById('body-mode-toggle');
-const bodyModeBtns = document.querySelectorAll('.body-mode-btn');
+  front = P(%torso.front, contour, 1.15)
+  back  = P(%torso.back, contour, 1.12)
 
-bodyToggleBtn?.addEventListener('click', () => {
-  bodyOverlayOn = !bodyOverlayOn;
-  bodyToggleBtn.classList.toggle('active', bodyOverlayOn);
-  bodyModeToggle.style.display = bodyOverlayOn ? '' : 'none';
-  update();
-});
+  sleeve = USE(set_in_sleeve)
 
-bodyModeBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    bodyModeBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    bodyOverlayMode = btn.dataset.bodyMode;
-    update();
-  });
-});
+  neck = O(@neck, circle, body+4cm)
+  front_opening = O(%torso.front, slit, @neck..@hip)
 
-const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
+  BUILD:
+    S(front.shoulder, back.shoulder, french)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.cap.cap_edge, 1.12)]
+    >> S(front.side, back.side, french)
+    >> C(front_opening, button(7), center)
+    >> F(neck, 1cm, in)
+}`;
+
+TESTS["test5_princess_bodice"] = `GARMENT princess_bodice [SYM] {
+
+  FABRIC: M(220gsm, crisp, none, 1.0, woven.plain)
+
+  front_center = P(%torso.front.L[0..0.5], contour, 1.0)
+  front_side   = P(%torso.front.L[0.5..1], contour, 1.0)
+  back         = P(%torso.back, contour, 1.05)
+
+  EDGE(front_center.side, curve(@bust.L, -3cm))
+  EDGE(front_side.center, curve(@bust.L, 3cm))
+
+  neck = O(@neck, circle, body+1cm)
+
+  BUILD:
+    S(front_center.side, front_side.center, plain)
+    >> S(front_side.side, back.side, plain)
+    >> D(back, @shoulder.R, 6°, 10cm)
+    >> F(neck, 1cm, in)
+}`;
+
+TESTS["test6_lined_jacket"] = `GARMENT lined_jacket [SYM] {
+
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+
+  front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back  = P(%torso.back + %leg[0..0.1], contour, 1.08)
+
+  sleeve = USE(set_in_sleeve)
+
+  LAYER lining {
+    FABRIC: M(80gsm, liquid, none, 0.9, woven.satin)
+
+    front = P(%torso.front + %leg[0..0.08], contour, 1.12)
+    back  = P(%torso.back + %leg[0..0.08], contour, 1.1)
+
+    SHARE: front.facing, hem, armhole
+    FREE: body, side
+
+    BUILD:
+      S(front.shoulder, back.shoulder, plain)
+      >> S(front.side, back.side, plain)
+  }
+
+  BUILD:
+    S(front.shoulder, back.shoulder, plain)
+    >> S(front.side, back.side, plain)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.cap.cap_edge, 1.12)]
+    >> C(front_opening, button(2), center)
+    >> ATTACH_LAYER(lining)
+}`;
+
+// ---------------------------------------------------------------------------
+// From viewer/src/app.js — DEFAULT_SOURCE + EXAMPLES
+// ---------------------------------------------------------------------------
+
+TESTS["viewer_tshirt"] = `GARMENT t_shirt [SYM] {
 
   FABRIC: M(160gsm, fluid, biaxial:15%, 1.0, knit.jersey)
 
@@ -83,141 +174,7 @@ const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
     >> F(cuff, 2cm, in)
 }`;
 
-editor.value = DEFAULT_SOURCE;
-
-let debounceTimer;
-editor.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(update, 250);
-});
-
-viewBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    viewBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentView = btn.dataset.view;
-    updateOverlayVisibility();
-    update();
-  });
-});
-
-function updateOverlayVisibility() {
-  const show = currentView === 'assembled';
-  if (bodyToggleBtn) bodyToggleBtn.style.display = show ? '' : 'none';
-  if (bodyModeToggle) bodyModeToggle.style.display = (show && bodyOverlayOn) ? '' : 'none';
-}
-
-function update() {
-  const source = (currentSrcMode === 'json' && activeGnlSource) ? activeGnlSource : editor.value;
-  if (!source.trim()) {
-    viewer.innerHTML = '';
-    status.textContent = 'Empty';
-    status.className = 'status';
-    return;
-  }
-
-  try {
-    const ast = parse(source);
-    const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
-    const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast);
-    viewer.innerHTML = svg;
-
-    const mainBlock = ast.blocks.find(b => b.type === 'garment') || ast.blocks[0];
-    const panels = mainBlock?.declarations.filter(d => d.value.type === 'call' && d.value.name === 'P').length ?? 0;
-    const steps = mainBlock?.build.length ?? 0;
-    const edgeCount = mainBlock?.edges?.length ?? 0;
-    const layerCount = mainBlock?.layers?.length ?? 0;
-    let statusText = `Parsed: ${panels} panel${panels !== 1 ? 's' : ''}, ${steps} build step${steps !== 1 ? 's' : ''}`;
-    if (edgeCount > 0) statusText += `, ${edgeCount} edge${edgeCount !== 1 ? 's' : ''}`;
-    if (layerCount > 0) statusText += `, ${layerCount} layer${layerCount !== 1 ? 's' : ''}`;
-    status.textContent = statusText;
-    status.className = 'status ok';
-  } catch (err) {
-    status.textContent = err.message;
-    status.className = 'status error';
-  }
-}
-
-// Initial render
-update();
-
-// Source toggle (JSON / GNL) — single textarea, swap content
-srcBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const mode = btn.dataset.src;
-    if (mode === currentSrcMode) return;
-    srcBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentSrcMode = mode;
-    if (mode === 'json') {
-      activeGnlSource = editor.value;
-      editor.value = activeJsonSource;
-      editor.readOnly = true;
-      editor.style.color = '#94a3b8';
-    } else {
-      editor.value = activeGnlSource;
-      editor.readOnly = false;
-      editor.style.color = '';
-    }
-  });
-});
-
-function showSourceToggle(jsonStr) {
-  activeJsonSource = jsonStr;
-  activeGnlSource = editor.value;
-  currentSrcMode = 'gnl';
-  sourceToggle.style.display = '';
-  srcBtns.forEach(b => b.classList.toggle('active', b.dataset.src === 'gnl'));
-  editor.readOnly = false;
-  editor.style.color = '';
-}
-
-function hideSourceToggle() {
-  activeJsonSource = null;
-  activeGnlSource = null;
-  currentSrcMode = 'gnl';
-  sourceToggle.style.display = 'none';
-  editor.readOnly = false;
-  editor.style.color = '';
-}
-
-async function loadKorostelevaTemplate(tpl) {
-  status.textContent = 'Loading...';
-  status.className = 'status';
-  try {
-    const res = await fetch(tpl.path);
-    if (!res.ok) throw new Error(`Failed to fetch ${tpl.path}`);
-    const jsonText = await res.text();
-    const json = JSON.parse(jsonText);
-    editor.value = convert(json, tpl.name);
-    showSourceToggle(jsonText);
-    update();
-  } catch (err) {
-    status.textContent = err.message;
-    status.className = 'status error';
-  }
-}
-
-// Examples dropdown
-const examples = document.getElementById('examples');
-if (examples) {
-  examples.addEventListener('change', () => {
-    const val = examples.value;
-    if (val && EXAMPLES[val]) {
-      hideSourceToggle();
-      editor.value = EXAMPLES[val];
-      update();
-    } else if (val && KOROSTELEVA_TEMPLATES[val]) {
-      const tpl = KOROSTELEVA_TEMPLATES[val];
-      loadKorostelevaTemplate(tpl);
-    }
-    examples.value = '';
-  });
-}
-
-const EXAMPLES = {
-  tshirt: DEFAULT_SOURCE,
-  button_shirt: `GARMENT button_shirt [SYM] {
+TESTS["viewer_button_shirt"] = `GARMENT button_shirt [SYM] {
 
   FABRIC: M(120gsm, crisp, none, 1.0, woven.poplin)
 
@@ -273,8 +230,9 @@ const EXAMPLES = {
 
     -- Hem
     >> F(hem, 2cm, in)
-}`,
-  wrap_skirt: `GARMENT wrap_skirt {
+}`;
+
+TESTS["viewer_wrap_skirt"] = `GARMENT wrap_skirt {
 
   FABRIC: M(200gsm, crisp, none, 1.0, woven.plain)
 
@@ -295,8 +253,9 @@ const EXAMPLES = {
        [G({front_L.top, front_R.top}, 1.0)]
     >> C(waist, tie, L_wrap_over_R)
     >> F(hem_line, 1cm, in)
-}`,
-  jacket_collar: `COMPONENT notched_lapel {
+}`;
+
+TESTS["viewer_jacket_collar"] = `COMPONENT notched_lapel {
 
   FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
   INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
@@ -313,8 +272,9 @@ const EXAMPLES = {
     >> F(collar_fall, gorge_line, out)
     >> S(collar_stand.ends, lapel.notch, plain)
     >> F(lapel, break_point, out)
-}`,
-  blazer: `GARMENT blazer [SYM] {
+}`;
+
+TESTS["viewer_blazer"] = `GARMENT blazer [SYM] {
 
   FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
   INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
@@ -387,8 +347,9 @@ const EXAMPLES = {
     -- Finish
     >> C(front_opening, button(2), center)
     >> F(front.bottom, 3cm, in)
-}`,
-  composed_blazer: `-- Reusable components
+}`;
+
+TESTS["viewer_composed_blazer"] = `-- Reusable components
 
 COMPONENT two_piece_sleeve {
   FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
@@ -463,8 +424,9 @@ GARMENT blazer [SYM] {
     >> ATTACH(pocket_L, front.pocket_mark.L)
     >> C(front_opening, button(2), center)
     >> F(front.bottom, 3cm, in)
-}`,
-  fitted_dress: `GARMENT fitted_dress [SYM] {
+}`;
+
+TESTS["viewer_fitted_dress"] = `GARMENT fitted_dress [SYM] {
 
   FABRIC: M(200gsm, crisp, none, 1.0, woven.plain)
 
@@ -510,5 +472,99 @@ GARMENT blazer [SYM] {
     >> F(hem, 3cm, in)
     >> C(zipper, zip(invisible), center_back)
     >> ATTACH_LAYER(lining)
-}`,
-};
+}`;
+// NOTE: The viewer's fitted_dress example uses `C(zipper, invisible, center_back)`,
+// but the spec requires `zip(invisible)`. The adapter/integration step will fix the
+// viewer example. This test uses the spec-correct form.
+
+// ============================================================================
+// Runner
+// ============================================================================
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+
+for (const [name, source] of Object.entries(TESTS)) {
+  try {
+    parse(source);
+    console.log(`  PASS  ${name}`);
+    passed++;
+  } catch (err) {
+    console.log(`  FAIL  ${name}`);
+    // Show the relevant portion of the error
+    const loc = err.location;
+    if (loc) {
+      const lines = source.split('\n');
+      const line = lines[loc.start.line - 1] || '';
+      console.log(`        Line ${loc.start.line}, Col ${loc.start.column}: ${err.message.split('\n')[0]}`);
+      console.log(`        > ${line}`);
+      console.log(`        ${' '.repeat(loc.start.column + 1)}^`);
+    } else {
+      console.log(`        ${err.message.split('\n')[0]}`);
+    }
+    failures.push(name);
+    failed++;
+  }
+}
+
+console.log(`\n${passed} passed, ${failed} failed out of ${passed + failed} tests`);
+if (failures.length) {
+  console.log(`Failed: ${failures.join(', ')}`);
+  process.exit(1);
+}
+
+// ============================================================================
+// Adapter tests: PEG parse → adapter → legacy AST shape
+// ============================================================================
+
+console.log('\n--- Adapter Tests ---\n');
+
+let adapterPassed = 0;
+let adapterFailed = 0;
+const adapterFailures = [];
+
+for (const [name, source] of Object.entries(TESTS)) {
+  try {
+    const pegAst = parse(source);
+    const legacy = pegAstToLegacy(pegAst);
+
+    // Verify basic structure
+    if (legacy.type !== 'program') throw new Error(`Expected program, got ${legacy.type}`);
+    if (!Array.isArray(legacy.blocks)) throw new Error('blocks is not an array');
+    for (const block of legacy.blocks) {
+      if (!['garment', 'component'].includes(block.type)) throw new Error(`Bad block type: ${block.type}`);
+      if (!Array.isArray(block.declarations)) throw new Error('declarations not an array');
+      if (!Array.isArray(block.build)) throw new Error('build not an array');
+      if (!Array.isArray(block.edges)) throw new Error('edges not an array');
+      if (!Array.isArray(block.layers)) throw new Error('layers not an array');
+
+      // Verify panels are call P
+      for (const d of block.declarations) {
+        if (d.type !== 'declaration') throw new Error(`Bad decl type: ${d.type}`);
+        if (d.value.type === 'call' && d.value.name === 'P') {
+          if (!d.value.args || d.value.args.length < 3) throw new Error(`Panel ${d.name} missing args`);
+        }
+      }
+
+      // Verify build steps
+      for (const s of block.build) {
+        if (s.type !== 'build_step') throw new Error(`Bad build step type: ${s.type}`);
+        if (!s.operation) throw new Error('Build step missing operation');
+      }
+    }
+
+    console.log(`  PASS  ${name}`);
+    adapterPassed++;
+  } catch (err) {
+    console.log(`  FAIL  ${name}: ${err.message}`);
+    adapterFailures.push(name);
+    adapterFailed++;
+  }
+}
+
+console.log(`\n${adapterPassed} passed, ${adapterFailed} failed out of ${adapterPassed + adapterFailed} adapter tests`);
+if (adapterFailures.length) {
+  console.log(`Failed: ${adapterFailures.join(', ')}`);
+  process.exit(1);
+}

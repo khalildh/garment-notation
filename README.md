@@ -36,6 +36,16 @@ GARMENT t_shirt [SYM] {
 }
 ```
 
+## Grammar
+
+The language is formally defined as a [PEG grammar](grammar/gnl.peg) targeting [Peggy](https://peggyjs.org). The generated parser produces a richly-typed AST which is adapted to the renderer's internal format at runtime.
+
+```sh
+npm install          # install Peggy (dev dependency only)
+npm run generate     # regenerate viewer/src/gnl-parser.js from grammar/gnl.peg
+npm test             # run parse + adapter tests against all examples
+```
+
 ## Viewer
 
 The repo includes a [live viewer](https://khalildh.github.io/garment-notation/viewer/) that parses GNL and renders both assembled garment views and flat pattern pieces.

@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "peggy grammar/gnl.peg -o viewer/src/gnl-parser.js --format es",
+    "test": "node tests/parse-tests.js"
+  },
+  "devDependencies": {
+    "peggy": "^4"
+  }
+}

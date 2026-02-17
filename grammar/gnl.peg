@@ -1,0 +1,580 @@
+// ============================================================================
+// GNL (Garment Notation Language) v0.2 — PEG Grammar
+// ============================================================================
+// Target: Peggy (PEG.js successor) / adaptable to pest, Lark, etc.
+//
+// Structure:
+//   1. Top-level declarations (GARMENT, COMPONENT)
+//   2. Body sections (FABRIC, panels, openings, build, layers)
+//   3. Primitives (P, O, S, EDGE)
+//   4. Operators (D, G, PL, F, DR, ST)
+//   5. Closures (C)
+//   6. Material (M)
+//   7. Composition (USE, ATTACH)
+//   8. Body references (@landmarks, %regions)
+//   9. Lexical rules (identifiers, numbers, whitespace)
+// ============================================================================
+
+
+// ---------------------------------------------------------------------------
+// 1. Top-Level
+// ---------------------------------------------------------------------------
+
+Program
+  = _ declarations:(TopLevelDecl _)* { return declarations.map(d => d[0]) }
+
+TopLevelDecl
+  = GarmentDecl
+  / ComponentDecl
+
+GarmentDecl
+  = "GARMENT" __ name:Identifier _ flags:Flags? _ "{" _ body:GarmentBody _ "}"
+    { return { type: "garment", name, flags: flags || [], ...body } }
+
+ComponentDecl
+  = "COMPONENT" __ name:Identifier _ "{" _ body:GarmentBody _ "}"
+    { return { type: "component", name, ...body } }
+
+Flags
+  = "[" _ head:Flag tail:(_ "," _ Flag)* _ "]"
+    { return [head, ...tail.map(t => t[3])] }
+
+Flag
+  = "SYM" { return "SYM" }
+
+
+// ---------------------------------------------------------------------------
+// 2. Garment / Component Body
+// ---------------------------------------------------------------------------
+
+GarmentBody
+  = statements:(Statement _)*
+    {
+      const result = { fabric: [], statements: [] }
+      for (const [s] of statements) {
+        if (s.type === "fabric_decl") result.fabric.push(s)
+        else result.statements.push(s)
+      }
+      return result
+    }
+
+Statement
+  = Comment
+  / FabricDecl
+  / InterlingDecl
+  / PanelAssignment
+  / OpeningAssignment
+  / ComponentUse
+  / LandmarkAssignment
+  / LineAssignment
+  / EdgeDecl
+  / BuildBlock
+  / LayerBlock
+
+Comment
+  = "--" content:$[^\n]* { return { type: "comment", content: content.trim() } }
+
+
+// ---------------------------------------------------------------------------
+// 2a. Fabric & Interlining Declarations
+// ---------------------------------------------------------------------------
+
+FabricDecl
+  = "FABRIC:" _ mat:Material
+    { return { type: "fabric_decl", material: mat } }
+
+InterlingDecl
+  = "INTERLINING:" _ mat:Material
+    { return { type: "interlining_decl", material: mat } }
+
+
+// ---------------------------------------------------------------------------
+// 2b. Panel Assignment
+// ---------------------------------------------------------------------------
+
+PanelAssignment
+  = name:Identifier _ "=" _ panel:PanelExpr
+    { return { type: "panel_assignment", name, panel } }
+
+PanelExpr
+  = Panel
+  / PanelBand    // for waistbands, cuffs — rect with explicit dims
+
+Panel
+  = "P(" _ region:RegionExpr _ "," _ shape:ShapeExpr _ "," _ ease:EaseExpr grain:(_ "," _ GrainExpr)? _ ")"
+    { return { type: "panel", region, shape, ease, grain: grain ? grain[3] : "warp" } }
+
+PanelBand
+  = "P(" _ region:RegionExpr _ "," _ shape:RectDims _ "," _ ease:EaseExpr _ ")"
+    { return { type: "panel", region, shape, ease, grain: "warp" } }
+
+
+// ---------------------------------------------------------------------------
+// 2c. Opening Assignment
+// ---------------------------------------------------------------------------
+
+OpeningAssignment
+  = name:Identifier _ "=" _ opening:Opening
+    { return { type: "opening_assignment", name, opening } }
+
+Opening
+  = "O(" _ loc:LocationExpr _ "," _ shape:OpeningShape _ params:(_ "," _ OpeningParam)* _ ")"
+    {
+      const p = {}
+      for (const param of params) Object.assign(p, param[3])
+      return { type: "opening", location: loc, shape, ...p }
+    }
+
+OpeningShape
+  = "circle" / "slit" / "keyhole" / "V" / "square" / "envelope" / "open"
+
+OpeningParam
+  = "body" _ "+" _ val:Measurement          { return { circumference: { base: "body", ease: val } } }
+  / "body" _ "+" _ val:Number _ unit:Unit    { return { circumference: { base: "body", ease: { value: val, unit } } } }
+  / "depth" _ "=" _ val:Measurement          { return { depth: val } }
+  / loc1:AnyRef _ ".." _ loc2:AnyRef  { return { span: { from: loc1, to: loc2 } } }
+  / ref:AnyRef  { return { param: ref } }
+
+
+// ---------------------------------------------------------------------------
+// 2d. Landmark / Line Assignment
+// ---------------------------------------------------------------------------
+
+LandmarkAssignment
+  = name:Identifier _ "=" _ expr:LandmarkExpr
+    { return { type: "landmark_assignment", name, expr } }
+
+LandmarkExpr
+  = base:Landmark _ op:("+" / "-") _ offset:Measurement
+    { return { type: "landmark_offset", base, op, offset } }
+  / Landmark
+
+LineAssignment
+  = name:Identifier _ "=" _ "LINE(" _ from:AnyRef _ "," _ to:AnyRef _ ")"
+    { return { type: "line_assignment", name, from, to } }
+
+
+// ---------------------------------------------------------------------------
+// 2e. Component Use
+// ---------------------------------------------------------------------------
+
+ComponentUse
+  = name:Identifier _ "=" _ "USE(" _ component:Identifier _ ")"
+    { return { type: "component_use", name, component } }
+
+
+// ---------------------------------------------------------------------------
+// 3. Primitives — Shape, Edge
+// ---------------------------------------------------------------------------
+
+ShapeExpr
+  = "contour" width:("(" _ "width" _ "=" _ Measurement _ ")")? 
+    { return { shape: "contour", width: width ? width[6] : null } }
+  / "rect"          { return { shape: "rect" } }
+  / "trapezoid" params:TrapezoidParams?  
+    { return { shape: "trapezoid", ...params } }
+  / "circle"        { return { shape: "circle" } }
+
+TrapezoidParams
+  = "(" _ head:TrapezoidParam tail:(_ "," _ TrapezoidParam)* _ ")"
+    {
+      const result = {}
+      for (const p of [head, ...tail.map(t => t[3])]) Object.assign(result, p)
+      return result
+    }
+
+TrapezoidParam
+  = "waist" _ "=" _ val:DimExpr   { return { waist: val } }
+  / "hem" _ "=" _ val:DimExpr     { return { hem: val } }
+
+RectDims
+  = "rect(" _ head:RectParam tail:(_ "," _ RectParam)* _ ")"
+    {
+      const result = { shape: "rect" }
+      for (const p of [head, ...tail.map(t => t[3])]) Object.assign(result, p)
+      return result
+    }
+
+RectParam
+  = "width" _ "=" _ val:DimExpr    { return { width: val } }
+  / "height" _ "=" _ val:DimExpr   { return { height: val } }
+  / "length" _ "=" _ val:DimExpr   { return { length: val } }
+
+// Dimensional expression: a number, measurement, or body-relative expression
+DimExpr
+  = coeff:Number? ref:BodyDimRef
+    { return { type: "body_relative", coefficient: coeff ?? 1, ref } }
+  / Measurement
+  / Number
+
+BodyDimRef
+  = "W"              { return "waist_circumference" }
+  / "H"              { return "hip_circumference" }
+  / "neck_circ"      { return "neck_circumference" }
+  / "bust_circ"      { return "bust_circumference" }
+
+EaseExpr
+  = "ease(" _ top:Number _ "," _ bottom:Number _ ")"
+    { return { type: "graduated_ease", top, bottom } }
+  / val:Number
+    { return { type: "uniform_ease", value: val } }
+
+GrainExpr
+  = "grain" _ "=" _ dir:GrainDirection  { return dir }
+  / dir:GrainDirection                   { return dir }
+
+GrainDirection
+  = "warp"  { return "warp" }
+  / "weft"  { return "weft" }
+  / "bias"  { return "bias" }
+  / deg:Integer "°"  { return { type: "angle", degrees: deg } }
+
+
+// ---------------------------------------------------------------------------
+// 3a. EDGE — Shaped panel edges
+// ---------------------------------------------------------------------------
+
+EdgeDecl
+  = "EDGE(" _ edge:QualifiedRef _ "," _ curve:CurveExpr _ ")"
+    { return { type: "edge_decl", edge, curve } }
+
+CurveExpr
+  = "curve(" _ landmark:Landmark _ "," _ curvature:SignedMeasurement _ ")"
+    { return { type: "curve", landmark, curvature } }
+
+SignedMeasurement
+  = sign:"-"? val:Number unit:Unit
+    { return { value: sign ? -val : val, unit } }
+
+
+// ---------------------------------------------------------------------------
+// 4. Operators (used inside build steps)
+// ---------------------------------------------------------------------------
+
+SeamOp
+  = "S(" _ a:EdgeRef _ "," _ b:EdgeRef _ "," _ st:SeamType _ ")"
+    { return { type: "seam", edge_a: a, edge_b: b, seam_type: st } }
+
+SeamType
+  = "plain" / "french" / "felled" / "lapped" / "bound" / "serged"
+
+DartOp
+  = "D(" _ panel:AnyRef _ "," _ loc:Landmark _ "," _ angle:Integer "°"? _ "," _ len:Measurement _ ")"
+    { return { type: "dart", panel, location: loc, angle, length: len } }
+
+GatherOp
+  = "G(" _ edge:EdgeRef _ "," _ ratio:Number _ ")"
+    { return { type: "gather", edge, ratio } }
+
+PleatOp
+  = "PL(" _ edge:EdgeRef _ "," _ pleatType:PleatType _ "," _ width:Measurement _ "," _ count:Integer _ "," _ dir:PleatDirection _ ")"
+    { return { type: "pleat", edge, pleat_type: pleatType, width, count, direction: dir } }
+
+PleatType
+  = "knife" / "box" / "inverted_box" / "accordion"
+
+PleatDirection
+  = "L" / "R" / "center" / "away"
+
+FoldOp
+  = "F(" _ target:EdgeRef _ "," _ width:DimExprOrRange _ "," _ dir:FoldDirection _ ")"
+    { return { type: "fold", target, width, direction: dir } }
+
+DimExprOrRange
+  = from:AnyRef _ ".." _ to:AnyRef  { return { type: "range", from, to } }
+  / Measurement
+  / AnyRef
+
+FoldDirection
+  = "in" / "out"
+
+DrapeOp
+  = "DR(" _ panel:AnyRef _ "," _ anchors:AnchorList _ ")"
+    { return { type: "drape", panel, anchors } }
+
+AnchorList
+  = "[" _ head:Landmark tail:(_ "," _ Landmark)* _ "]"
+    { return [head, ...tail.map(t => t[3])] }
+
+StretchOp
+  = "ST(" _ panel:AnyRef _ "," _ axis:StretchAxis _ "," _ ratio:Number _ ")"
+    { return { type: "stretch", panel, axis, ratio } }
+
+StretchAxis
+  = "warp" / "weft" / "biaxial"
+
+FuseOp
+  = "FUSE(" _ panel:AnyRef _ "," _ material:Identifier _ ")"
+    { return { type: "fuse", panel, material } }
+
+
+// ---------------------------------------------------------------------------
+// 5. Closures
+// ---------------------------------------------------------------------------
+
+ClosureOp
+  = "C(" _ opening:AnyRef _ "," _ ctype:ClosureType _ "," _ pos:ClosurePosition _ ")"
+    { return { type: "closure", opening, closure_type: ctype, position: pos } }
+
+ClosureType
+  = "button(" _ n:Integer _ ")"     { return { type: "button", count: n } }
+  / "zip(" _ ztype:ZipType _ ")"    { return { type: "zip", zip_type: ztype } }
+  / "snap(" _ n:Integer _ ")"       { return { type: "snap", count: n } }
+  / "toggle(" _ n:Integer _ ")"     { return { type: "toggle", count: n } }
+  / "hook"    { return { type: "hook" } }
+  / "tie"     { return { type: "tie" } }
+  / "velcro"  { return { type: "velcro" } }
+  / "lace"    { return { type: "lace" } }
+  / "wrap"    { return { type: "wrap" } }
+  / "pin"     { return { type: "pin" } }
+
+ZipType
+  = "invisible" / "exposed" / "metal" / "coil" / "molded"
+
+ClosurePosition
+  = "center" !IdentifierTail  { return "center" }
+  / "inner"  !IdentifierTail  { return "inner" }
+  / "outer"  !IdentifierTail  { return "outer" }
+  / id:Identifier "_over_" id2:Identifier  { return id + "_over_" + id2 }
+  / id:Identifier "_wrap_over_" id2:Identifier  { return id + "_wrap_over_" + id2 }
+  / Identifier
+
+IdentifierTail
+  = [a-zA-Z0-9_]
+
+
+// ---------------------------------------------------------------------------
+// 6. Material
+// ---------------------------------------------------------------------------
+
+Material
+  = "M(" _ weight:WeightExpr _ "," _ drape:DrapeExpr _ "," _ stretch:StretchExpr _ "," _ opacity:Number _ "," _ texture:TextureExpr _ ")"
+    { return { type: "material", weight, drape, stretch, opacity, texture } }
+
+WeightExpr
+  = val:Integer "gsm"               { return { type: "gsm", value: val } }
+  / "sheer" / "light" / "medium" / "heavy" / "coating"
+
+DrapeExpr
+  = "stiff" / "crisp" / "fluid" / "liquid"
+
+StretchExpr
+  = axis:("biaxial" / "weft" / "warp") ":" pct:Integer "%"
+    { return { axis, percentage: pct } }
+  / "biaxial" { return { axis: "biaxial" } }
+  / "none"    { return { axis: "none" } }
+
+TextureExpr
+  = category:Identifier "." sub:Identifier  { return category + "." + sub }
+  / Identifier
+
+
+// ---------------------------------------------------------------------------
+// 7. Build Block
+// ---------------------------------------------------------------------------
+
+BuildBlock
+  = "BUILD:" _ steps:BuildChain
+    { return { type: "build_block", steps } }
+
+BuildChain
+  = head:BuildStep tail:(_ ">>" _ BuildStep)*
+    { return [head, ...tail.map(t => t[3])] }
+
+BuildStep
+  = step:BuildOp modifiers:(_ Modifier)*
+    {
+      const mods = modifiers.map(m => m[1]).filter(Boolean)
+      return mods.length ? { ...step, modifiers: mods } : step
+    }
+
+BuildOp
+  = SeamOp
+  / FoldOp
+  / GatherOp
+  / PleatOp
+  / DartOp
+  / DrapeOp
+  / StretchOp
+  / FuseOp
+  / ClosureOp
+  / AttachOp
+  / AttachLayerOp
+  / Comment
+
+// Inline modifier: [G(edge, ratio)] or [PL(...)] applied to a build step
+Modifier
+  = "[" _ op:BuildOp _ "]"  { return op }
+
+
+// ---------------------------------------------------------------------------
+// 8. Composition — ATTACH
+// ---------------------------------------------------------------------------
+
+AttachOp
+  = "ATTACH(" _ component:AnyRef _ "," _ target:EdgeRef _ ")"
+    { return { type: "attach", component, target } }
+
+AttachLayerOp
+  = "ATTACH_LAYER(" _ layer:Identifier _ ")"
+    { return { type: "attach_layer", layer } }
+
+
+// ---------------------------------------------------------------------------
+// 9. Layer Block
+// ---------------------------------------------------------------------------
+
+LayerBlock
+  = "LAYER" __ name:Identifier _ "{" _ body:LayerBody _ "}"
+    { return { type: "layer_block", name, ...body } }
+
+LayerBody
+  = statements:(LayerStatement _)*
+    {
+      const result = { fabric: null, share: [], free: [], statements: [] }
+      for (const [s] of statements) {
+        if (s.type === "fabric_decl") result.fabric = s
+        else if (s.type === "share_decl") result.share = s.edges
+        else if (s.type === "free_decl") result.free = s.edges
+        else result.statements.push(s)
+      }
+      return result
+    }
+
+LayerStatement
+  = FabricDecl
+  / ShareDecl
+  / FreeDecl
+  / PanelAssignment
+  / BuildBlock
+  / Comment
+
+ShareDecl
+  = "SHARE:" _ edges:IdentifierList
+    { return { type: "share_decl", edges } }
+
+FreeDecl
+  = "FREE:" _ edges:IdentifierList
+    { return { type: "free_decl", edges } }
+
+IdentifierList
+  = "[" _ head:QualifiedRef tail:(_ "," _ QualifiedRef)* _ "]"
+    { return [head, ...tail.map(t => t[3])] }
+  / head:QualifiedRef tail:(_ "," _ QualifiedRef)*
+    { return [head, ...tail.map(t => t[3])] }
+
+
+// ---------------------------------------------------------------------------
+// 10. Body References
+// ---------------------------------------------------------------------------
+
+// @landmark with optional .L/.R and offset
+Landmark
+  = "@" name:IdentifierChars side:("." ("L" / "R"))? offset:(_ LandmarkOffset)?
+    {
+      return {
+        type: "landmark",
+        name,
+        side: side ? side[1] : null,
+        offset: offset ? offset[1] : null
+      }
+    }
+
+LandmarkOffset
+  = "*" _ val:Number    { return { type: "multiply", value: val } }
+  / "+" _ val:Measurement  { return { type: "add", value: val } }
+  / "-" _ val:Measurement  { return { type: "subtract", value: val } }
+
+// %region with optional .sub and [range]
+Region
+  = "%" name:IdentifierChars subs:("." IdentifierChars)* range:Subdivision?
+    {
+      return {
+        type: "region",
+        name,
+        subpath: subs.map(s => s[1]),
+        range: range
+      }
+    }
+
+Subdivision
+  = "[" _ start:Number _ ".." _ end:Number _ "]"
+    { return { start, end } }
+
+// Region expressions: regions combined with +
+RegionExpr
+  = head:Region tail:(_ "+" _ Region)*
+    {
+      return tail.length === 0
+        ? head
+        : { type: "region_union", regions: [head, ...tail.map(t => t[3])] }
+    }
+
+// Location: landmark or region boundary
+LocationExpr
+  = Landmark
+  / Region
+
+
+// ---------------------------------------------------------------------------
+// 11. References (qualified names, edge refs)
+// ---------------------------------------------------------------------------
+
+// Qualified reference: foo.bar.baz
+QualifiedRef
+  = head:IdentifierChars tail:("." IdentifierChars)*
+    {
+      const parts = [head, ...tail.map(t => t[1])]
+      return parts.length === 1 ? parts[0] : { type: "qualified_ref", parts }
+    }
+
+// Edge ref: can be a qualified ref, a landmark, or a set of edges
+EdgeRef
+  = "{" _ head:EdgeRefSingle tail:(_ "," _ EdgeRefSingle)* _ "}"
+    { return { type: "edge_set", edges: [head, ...tail.map(t => t[3])] } }
+  / EdgeRefSingle
+
+EdgeRefSingle
+  = Landmark
+  / QualifiedRef
+
+// Any ref: landmark, region, or qualified identifier
+AnyRef
+  = Landmark
+  / Region
+  / QualifiedRef
+
+
+// ---------------------------------------------------------------------------
+// 12. Lexical Rules
+// ---------------------------------------------------------------------------
+
+Identifier
+  = chars:IdentifierChars { return chars }
+
+IdentifierChars
+  = $([a-zA-Z_] [a-zA-Z0-9_]*)
+
+Measurement
+  = val:Number unit:Unit { return { value: val, unit } }
+
+Unit
+  = "cm" / "mm" / "m" / "in" / "\"" / "gsm"
+
+Number
+  = sign:"-"? int:$[0-9]+ frac:("." $[0-9]+)?
+    {
+      const n = parseFloat((sign || "") + int + (frac ? "." + frac[1] : ""))
+      return n
+    }
+
+Integer
+  = digits:$[0-9]+
+    { return parseInt(digits, 10) }
+
+// Whitespace & line handling
+_  "optional whitespace"
+  = ([ \t\n\r] / Comment)*
+
+__ "required whitespace"
+  = ([ \t\n\r] / Comment)+

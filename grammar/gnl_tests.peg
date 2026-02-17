@@ -1,0 +1,230 @@
+// ============================================================================
+// GNL PEG Grammar — Test Cases & Design Notes
+// ============================================================================
+//
+// These are example GNL programs the grammar should accept.
+// Use with Peggy (https://peggyjs.org) to test:
+//
+//   npm install peggy
+//   npx peggy gnl.peg
+//   node -e "const p = require('./gnl.js'); console.log(JSON.stringify(p.parse(input), null, 2))"
+//
+// ============================================================================
+
+
+// ---------------------------------------------------------------------------
+// TEST 1: Minimal garment — verifies basic structure
+// ---------------------------------------------------------------------------
+
+GARMENT tank_top [SYM] {
+
+  FABRIC: M(120gsm, fluid, biaxial:15%, 0.9, knit.jersey)
+
+  front = P(%torso.front, contour, 1.1)
+  back  = P(%torso.back, contour, 1.1)
+
+  neck = O(@neck, circle, body+2cm)
+  hem  = O(@hip, circle, body+6cm)
+
+  BUILD:
+    S(front.shoulder, back.shoulder, serged)
+    >> S(front.side, back.side, serged)
+    >> F(neck, 1cm, in)
+    >> F(hem, 2cm, in)
+}
+
+
+// ---------------------------------------------------------------------------
+// TEST 2: Graduated ease, grain, and modifiers
+// ---------------------------------------------------------------------------
+
+GARMENT flared_skirt {
+
+  FABRIC: M(180gsm, fluid, none, 1.0, woven.plain)
+
+  front = P(%torso.front + %leg.L[0..0.3], trapezoid(waist=0.5W, hem=1.5W), ease(1.0, 2.0))
+  back  = P(%torso.back + %leg.R[0..0.3], trapezoid(waist=0.5W, hem=1.5W), ease(1.0, 2.0))
+
+  waist = O(@waist, circle, body+2cm)
+
+  BUILD:
+    S(front.side.L, back.side.L, french)
+    >> S(front.side.R, back.side.R, french)
+    >> G(front.top, 1.1)
+    >> C(waist, zip(invisible), center)
+    >> F(front.bottom, 1.5cm, in)
+}
+
+
+// ---------------------------------------------------------------------------
+// TEST 3: Bias-cut panel with drape
+// ---------------------------------------------------------------------------
+
+GARMENT draped_camisole [SYM] {
+
+  FABRIC: M(90gsm, liquid, none, 0.7, woven.satin)
+
+  front = P(%torso.front, contour, 1.3, bias)
+  back  = P(%torso.back, contour, 1.1)
+
+  neck = O(@neck, V, depth=12cm)
+
+  BUILD:
+    DR(front, [@shoulder.L, @shoulder.R])
+    >> S(front.side, back.side, french)
+    >> F(neck, 0.5cm, in)
+}
+
+
+// ---------------------------------------------------------------------------
+// TEST 4: Component with USE/ATTACH + inline modifier
+// ---------------------------------------------------------------------------
+
+COMPONENT set_in_sleeve {
+  cap   = P(%arm[0..0.6], contour, 1.15)
+  under = P(%arm[0..0.6], contour, 1.05)
+  cuff  = O(@elbow, circle, body+3cm)
+
+  BUILD:
+    S(cap.back, under.back, serged)
+    >> S(cap.front, under.front, serged)
+    >> F(cuff, 2cm, in)
+}
+
+GARMENT blouse [SYM] {
+
+  FABRIC: M(110gsm, fluid, none, 0.8, woven.plain)
+
+  front = P(%torso.front, contour, 1.15)
+  back  = P(%torso.back, contour, 1.12)
+
+  sleeve = USE(set_in_sleeve)
+
+  neck = O(@neck, circle, body+4cm)
+  front_opening = O(%torso.front, slit, @neck..@hip)
+
+  BUILD:
+    S(front.shoulder, back.shoulder, french)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.cap.cap_edge, 1.12)]
+    >> S(front.side, back.side, french)
+    >> C(front_opening, button(7), center)
+    >> F(neck, 1cm, in)
+}
+
+
+// ---------------------------------------------------------------------------
+// TEST 5: EDGE declarations (princess seam)
+// ---------------------------------------------------------------------------
+
+GARMENT princess_bodice [SYM] {
+
+  FABRIC: M(220gsm, crisp, none, 1.0, woven.plain)
+
+  front_center = P(%torso.front.L[0..0.5], contour, 1.0)
+  front_side   = P(%torso.front.L[0.5..1], contour, 1.0)
+  back         = P(%torso.back, contour, 1.05)
+
+  EDGE(front_center.side, curve(@bust.L, -3cm))
+  EDGE(front_side.center, curve(@bust.L, 3cm))
+
+  neck = O(@neck, circle, body+1cm)
+
+  BUILD:
+    S(front_center.side, front_side.center, plain)
+    >> S(front_side.side, back.side, plain)
+    >> D(back, @shoulder.R, 6°, 10cm)
+    >> F(neck, 1cm, in)
+}
+
+
+// ---------------------------------------------------------------------------
+// TEST 6: LAYER (lined jacket)
+// ---------------------------------------------------------------------------
+
+GARMENT lined_jacket [SYM] {
+
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+
+  front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back  = P(%torso.back + %leg[0..0.1], contour, 1.08)
+
+  sleeve = USE(set_in_sleeve)
+
+  LAYER lining {
+    FABRIC: M(80gsm, liquid, none, 0.9, woven.satin)
+
+    front = P(%torso.front + %leg[0..0.08], contour, 1.12)
+    back  = P(%torso.back + %leg[0..0.08], contour, 1.1)
+
+    SHARE: front.facing, hem, armhole
+    FREE: body, side
+
+    BUILD:
+      S(front.shoulder, back.shoulder, plain)
+      >> S(front.side, back.side, plain)
+  }
+
+  BUILD:
+    S(front.shoulder, back.shoulder, plain)
+    >> S(front.side, back.side, plain)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.cap.cap_edge, 1.12)]
+    >> C(front_opening, button(2), center)
+    >> ATTACH_LAYER(lining)
+}
+
+
+// ============================================================================
+// DESIGN NOTES — Decisions & Known Limitations
+// ============================================================================
+//
+// 1. COMMENT HANDLING
+//    GNL uses `--` for comments (like SQL, Haskell, Lua). These are folded
+//    into the whitespace rule so they can appear anywhere. They also appear
+//    as valid BuildOps so they survive parsing if interleaved in build chains.
+//
+// 2. EDGE SETS — { a, b }
+//    Curly-brace sets are currently only valid in EdgeRef position (seam args,
+//    attach targets). They are NOT general-purpose. If GNL later needs set
+//    expressions elsewhere, this rule should be lifted to a general SetExpr.
+//
+// 3. BODY-RELATIVE DIMENSIONS — 0.5W, 2H, neck_circ
+//    The grammar supports a small set of body dimension shorthands (W, H,
+//    neck_circ, bust_circ). These are intentionally limited. A future version
+//    might support arbitrary body measurements via a lookup table, but for now
+//    the grammar keeps it explicit.
+//
+// 4. LANDMARK ARITHMETIC
+//    The spec uses expressions like `@chest.center + 5cm_below` and
+//    `@shoulder * 0.7`. The grammar supports `+/- measurement` and `* number`
+//    on landmarks but does NOT support directional qualifiers like `_below`.
+//    This is a known gap — directional offsets probably need a dedicated
+//    syntax like `@chest.center + 5cm along:vertical`.
+//
+// 5. INLINE MODIFIERS — [G(edge, ratio)]
+//    These attach to the preceding build step. The grammar parses them as
+//    a list of modifiers on a BuildStep. Semantic validation should ensure
+//    the modifier is compatible with the step (e.g., a gather modifier on
+//    a seam makes sense; a gather modifier on a fold probably doesn't).
+//
+// 6. MISSING FROM GRAMMAR (future work):
+//    - OVER(garment_a, garment_b) — layering separate garments
+//    - COLOR / COLORWORK — prints, stripes, colorblocking
+//    - EMB — embellishment
+//    - FINISH — wash/distress
+//    - Parametric expressions — e.g. `waist_circumference * 0.25 + 2cm`
+//      (currently only simple body refs like 0.5W are supported)
+//    - Conditional construction — e.g. optional pockets
+//
+// 7. SEMANTIC VALIDATION (not in grammar, needed in a separate pass):
+//    - Panel names resolve in scope
+//    - Component names exist before USE
+//    - Edge references point to real edges on real panels
+//    - Build order is topologically valid (can't sew to an edge
+//      that doesn't exist yet)
+//    - Ease values are physically plausible
+//    - Subdivision ranges are within [0, 1]
+//    - Grain angles are within [0, 180]
+//
+// ============================================================================
