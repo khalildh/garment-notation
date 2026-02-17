@@ -1,3 +1,13 @@
+// @ts-check
+/** @typedef {import('./types.js').Expr} Expr */
+/** @typedef {import('./types.js').Block} Block */
+/** @typedef {import('./types.js').Program} Program */
+/** @typedef {import('./types.js').Declaration} Declaration */
+/** @typedef {import('./types.js').Panel} Panel */
+/** @typedef {import('./types.js').DartInfo} DartInfo */
+/** @typedef {import('./types.js').EdgeInfo} EdgeInfo */
+/** @typedef {import('./types.js').RegionDims} RegionDims */
+
 import { getRegionDims, combineRegions, resolveVar } from './body.js';
 
 const SCALE = 4; // px per cm
@@ -17,6 +27,11 @@ const GRAIN_COLOR = '#94a3b8';
 const LABEL_COLOR = '#1e293b';
 const DIM_COLOR = '#64748b';
 
+/**
+ * Render flat pattern pieces as SVG.
+ * @param {Program} ast
+ * @returns {string}
+ */
 export function render(ast) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
   const block = resolveMain(ast);
@@ -71,6 +86,10 @@ export function render(ast) {
   return svg;
 }
 
+/**
+ * @param {{ name: string, value: Expr }} decl
+ * @returns {Panel}
+ */
 function extractPanelFromDecl(decl) {
   const args = decl.value.args;
   const regionExpr = args[0];
@@ -124,6 +143,7 @@ function extractPanelFromDecl(decl) {
   };
 }
 
+/** @param {Block} block @returns {Panel[]} */
 function extractPanels(block) {
   const panels = [];
   for (const decl of block.declarations) {
@@ -134,6 +154,7 @@ function extractPanels(block) {
   return panels;
 }
 
+/** @param {Block} block @returns {Panel[]} */
 function extractLiningPanels(block) {
   const panels = [];
   if (!block.layers) return panels;
@@ -153,6 +174,7 @@ function extractLiningPanels(block) {
   return panels;
 }
 
+/** @param {Block} block @returns {EdgeInfo[]} */
 function extractEdges(block) {
   const edges = [];
   if (!block.edges) return edges;
@@ -177,6 +199,7 @@ function extractEdges(block) {
   return edges;
 }
 
+/** @param {Block} block @returns {DartInfo[]} */
 function extractDarts(block) {
   const darts = [];
   for (const step of block.build) {
@@ -212,6 +235,7 @@ function extractOpenings(block) {
   return openings;
 }
 
+/** @param {Expr | undefined} expr @returns {RegionDims} */
 function resolveRegionDims(expr) {
   if (!expr) return { widthTop: 30, widthBottom: 30, height: 30 };
   if (expr.type === 'region') return getRegionDims(expr.value, expr.range);
@@ -237,6 +261,7 @@ function resolveShape(expr) {
   return 'rect';
 }
 
+/** @param {Expr | undefined} expr @returns {number | null} */
 function resolveNumber(expr) {
   if (!expr) return null;
   if (expr.type === 'number') return expr.value;
@@ -494,11 +519,18 @@ function dartMark(w, h, dart) {
 
 // --- Component resolution ---
 
+/** @param {Program} ast @returns {Block} */
 function resolveMain(ast) {
   // Prefer the GARMENT block; fall back to first block
   return ast.blocks.find(b => b.type === 'garment') || ast.blocks[ast.blocks.length - 1];
 }
 
+/**
+ * Expand USE() declarations by pulling panels from referenced components.
+ * @param {Block} block
+ * @param {Program} ast
+ * @returns {Block}
+ */
 function resolveComponents(block, ast) {
   // Find USE() declarations and expand them by pulling in panels from the referenced component
   const components = {};

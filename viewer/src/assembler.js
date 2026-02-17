@@ -1,3 +1,19 @@
+// @ts-check
+/** @typedef {import('./types.js').Expr} Expr */
+/** @typedef {import('./types.js').Block} Block */
+/** @typedef {import('./types.js').Program} Program */
+/** @typedef {import('./types.js').RegionDims} RegionDims */
+
+/**
+ * @typedef {{
+ *   region: string,
+ *   shape: string,
+ *   ease: number,
+ *   dims: RegionDims,
+ *   raw: Expr
+ * }} AssemblerPanel
+ */
+
 import { getRegionDims, combineRegions, BODY } from './body.js';
 
 const SCALE = 4;
@@ -13,6 +29,11 @@ const STITCH_COLOR = '#94a3b8';
 
 const PRINCESS_COLOR = '#e11d48';
 
+/**
+ * Render assembled garment technical flat as SVG.
+ * @param {Program} ast
+ * @returns {string}
+ */
 export function assemble(ast) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
   const block = resolveMain(ast);
@@ -60,6 +81,7 @@ function resolveNumberDeep(expr) {
   return null;
 }
 
+/** @param {Block} block @returns {Record<string, AssemblerPanel>} */
 function extractPanelInfo(block) {
   const panels = {};
   for (const decl of block.declarations) {
@@ -543,10 +565,16 @@ function dimensionLineV(x, y1, x2, y2, label) {
 
 // --- Component resolution ---
 
+/** @param {Program} ast @returns {Block} */
 function resolveMain(ast) {
   return ast.blocks.find(b => b.type === 'garment') || ast.blocks[ast.blocks.length - 1];
 }
 
+/**
+ * @param {Block} block
+ * @param {Program} ast
+ * @returns {Block}
+ */
 function resolveComponents(block, ast) {
   const components = {};
   for (const b of ast.blocks) {

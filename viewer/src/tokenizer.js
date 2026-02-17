@@ -1,3 +1,8 @@
+// @ts-check
+/** @typedef {import('./types.js').Token} Token */
+/** @typedef {import('./types.js').TokenType} TokenType */
+
+/** @type {[TokenType | null, RegExp][]} */
 const PATTERNS = [
   [null, /^[ \t\r]+/],
   [null, /^--[^\n]*/],
@@ -25,7 +30,13 @@ const PATTERNS = [
   ['DOT', /^\./],
 ];
 
+/**
+ * Tokenize GNL source into a stream of tokens.
+ * @param {string} source
+ * @returns {Token[]}
+ */
 export function tokenize(source) {
+  /** @type {Token[]} */
   const tokens = [];
   let pos = 0, line = 1, col = 1;
 

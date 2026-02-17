@@ -1,18 +1,48 @@
+// @ts-check
+/** @typedef {import('./types.js').Token} Token */
+/** @typedef {import('./types.js').Expr} Expr */
+/** @typedef {import('./types.js').Declaration} Declaration */
+/** @typedef {import('./types.js').BuildStep} BuildStep */
+/** @typedef {import('./types.js').Layer} Layer */
+/** @typedef {import('./types.js').Block} Block */
+/** @typedef {import('./types.js').Program} Program */
+
 const UNITS = ['cm', 'mm', 'gsm', 'm', 'in'];
 
+/**
+ * Parse a token stream into a GNL AST.
+ * @param {Token[]} tokens
+ * @returns {Program}
+ */
 export function parse(tokens) {
   let pos = 0;
 
+  /** @returns {Token} */
   function peek() { return tokens[pos]; }
+  /** @returns {Token} */
   function advance() { return tokens[pos++]; }
+  /**
+   * @param {string} type
+   * @param {string} [value]
+   * @returns {boolean}
+   */
   function check(type, value) {
     const t = peek();
     return t.type === type && (value === undefined || t.value === value);
   }
+  /**
+   * @param {string} type
+   * @param {string} [value]
+   * @returns {Token | null}
+   */
   function match(type, value) {
     if (check(type, value)) return advance();
     return null;
   }
+  /**
+   * @param {string} type
+   * @returns {Token}
+   */
   function expect(type) {
     const t = advance();
     if (t.type !== type) {
@@ -21,7 +51,9 @@ export function parse(tokens) {
     return t;
   }
 
+  /** @returns {Program} */
   function parseProgram() {
+    /** @type {Block[]} */
     const blocks = [];
     while (!check('EOF')) {
       blocks.push(parseBlock());
@@ -29,12 +61,14 @@ export function parse(tokens) {
     return { type: 'program', blocks };
   }
 
+  /** @returns {Block} */
   function parseBlock() {
     const kw = advance();
     if (kw.value !== 'GARMENT' && kw.value !== 'COMPONENT') {
       throw new Error(`Expected GARMENT or COMPONENT at line ${kw.line}, got '${kw.value}'`);
     }
     const name = expect('IDENT');
+    /** @type {string[]} */
     let flags = [];
     if (match('LBRACKET')) {
       while (!check('RBRACKET')) {
@@ -46,15 +80,21 @@ export function parse(tokens) {
     expect('LBRACE');
     const body = parseBody();
     expect('RBRACE');
-    return { type: kw.value.toLowerCase(), name: name.value, flags, ...body };
+    return /** @type {Block} */ ({ type: kw.value.toLowerCase(), name: name.value, flags, ...body });
   }
 
   function parseBody() {
+    /** @type {Expr | null} */
     let fabric = null;
+    /** @type {Expr | null} */
     let interlining = null;
+    /** @type {Declaration[]} */
     const declarations = [];
+    /** @type {BuildStep[]} */
     const build = [];
+    /** @type {Expr[]} */
     const edges = [];
+    /** @type {Layer[]} */
     const layers = [];
 
     while (!check('RBRACE') && !check('EOF')) {
@@ -79,15 +119,21 @@ export function parse(tokens) {
     return { fabric, interlining, declarations, build, edges, layers };
   }
 
+  /** @returns {Layer} */
   function parseLayer() {
     advance(); // skip LAYER
     const name = expect('IDENT');
     expect('LBRACE');
 
+    /** @type {Expr | null} */
     let fabric = null;
+    /** @type {Declaration[]} */
     const declarations = [];
+    /** @type {BuildStep[]} */
     const build = [];
+    /** @type {Expr[]} */
     let share = [];
+    /** @type {Expr[]} */
     let free = [];
 
     while (!check('RBRACE') && !check('EOF')) {
@@ -122,6 +168,7 @@ export function parse(tokens) {
     return { type: 'layer', name: name.value, fabric, declarations, build, share, free };
   }
 
+  /** @returns {Declaration} */
   function parseDeclaration() {
     const name = expect('IDENT');
     expect('ASSIGN');
@@ -129,7 +176,9 @@ export function parse(tokens) {
     return { type: 'declaration', name: name.value, value };
   }
 
+  /** @returns {BuildStep[]} */
   function parseBuildChain() {
+    /** @type {BuildStep[]} */
     const steps = [];
     steps.push(parseBuildStep());
     while (match('CHAIN')) {
@@ -138,8 +187,10 @@ export function parse(tokens) {
     return steps;
   }
 
+  /** @returns {BuildStep} */
   function parseBuildStep() {
     const operation = parseExpr();
+    /** @type {Expr | null} */
     let modifier = null;
     if (match('LBRACKET')) {
       modifier = parseExpr();
@@ -148,6 +199,7 @@ export function parse(tokens) {
     return { type: 'build_step', operation, modifier };
   }
 
+  /** @returns {Expr} */
   function parseExpr() {
     let left = parseAtom();
     while (true) {
@@ -168,6 +220,7 @@ export function parse(tokens) {
     return left;
   }
 
+  /** @returns {Expr} */
   function parseAtom() {
     const tok = peek();
 
@@ -209,6 +262,7 @@ export function parse(tokens) {
 
     if (tok.type === 'REGION') {
       advance();
+      /** @type {Expr | null} */
       let range = null;
       if (match('LBRACKET')) {
         range = parseExpr();
@@ -219,6 +273,7 @@ export function parse(tokens) {
 
     if (tok.type === 'LBRACE') {
       advance();
+      /** @type {Expr[]} */
       const elements = [];
       while (!check('RBRACE')) {
         elements.push(parseExpr());
@@ -258,7 +313,9 @@ export function parse(tokens) {
     throw new Error(`Unexpected token ${tok.type} ('${tok.value}') at line ${tok.line}`);
   }
 
+  /** @returns {Expr[]} */
   function parseArgList() {
+    /** @type {Expr[]} */
     const args = [];
     while (!check('RPAREN') && !check('EOF')) {
       // named arg: ident = expr

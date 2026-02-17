@@ -1,3 +1,7 @@
+// @ts-check
+/** @typedef {import('./types.js').RegionDims} RegionDims */
+/** @typedef {import('./types.js').Expr} Expr */
+
 // Standard body measurements in cm (women's medium / size 10)
 export const BODY = {
   neck_circ: 37,
@@ -17,7 +21,7 @@ export const BODY = {
   ankle_circ: 22,
 };
 
-// Base dimensions per region: { widthTop, widthBottom, height }
+/** @type {Record<string, { wTop: number, wBot: number, h: number }>} */
 const REGION_DIMS = {
   'torso.front':   { wTop: 46, wBot: 37, h: 42 },
   'torso.back':    { wTop: 44, wBot: 37, h: 40 },
@@ -40,17 +44,27 @@ const REGION_DIMS = {
   'hip':           { wTop: 98, wBot: 98, h: 10 },
 };
 
+/**
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t
+ */
 function lerp(a, b, t) { return a + (b - a) * t; }
 
+/**
+ * Get dimensions for a body region, optionally narrowed by a range.
+ * @param {string} regionStr - e.g. "%torso.front"
+ * @param {Expr | null} range - range expression or null
+ * @returns {RegionDims}
+ */
 export function getRegionDims(regionStr, range) {
-  // regionStr: "%torso.front" → "torso.front"
   const key = regionStr.replace(/^%/, '');
   const base = REGION_DIMS[key] || { wTop: 30, wBot: 30, h: 30 };
 
   let rangeStart = 0, rangeEnd = 1;
   if (range && range.type === 'range') {
-    rangeStart = range.start?.value ?? 0;
-    rangeEnd = range.end?.value ?? 1;
+    rangeStart = /** @type {any} */ (range).start?.value ?? 0;
+    rangeEnd = /** @type {any} */ (range).end?.value ?? 1;
   }
 
   return {
@@ -60,7 +74,12 @@ export function getRegionDims(regionStr, range) {
   };
 }
 
-// Combine dimensions for region unions (A + B)
+/**
+ * Combine dimensions for region unions (A + B).
+ * @param {RegionDims} dimsA
+ * @param {RegionDims} dimsB
+ * @returns {RegionDims}
+ */
 export function combineRegions(dimsA, dimsB) {
   return {
     widthTop: Math.max(dimsA.widthTop, dimsB.widthTop),
@@ -69,7 +88,13 @@ export function combineRegions(dimsA, dimsB) {
   };
 }
 
+/**
+ * Resolve a named variable to a body measurement.
+ * @param {string} name
+ * @returns {number | null}
+ */
 export function resolveVar(name) {
+  /** @type {Record<string, number>} */
   const map = {
     W: BODY.waist_circ,
     neck_circ: BODY.neck_circ,
