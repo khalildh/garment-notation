@@ -1,0 +1,30 @@
+GARMENT basic_tee_jacket [SYM] {
+
+  -- Panels
+  lfsleeve = P(%arm.L, contour, 1.1)
+  back = P(%torso.back, contour, 0.98)
+  lbsleeve = P(%arm.L, contour, 1.1)
+  rfsleeve = P(%arm.R, contour, 1.1)
+  rbsleeve = P(%arm.R, contour, 1.1)
+  front_right = P(%torso.front, contour, 1.1)
+  front_left = P(%torso.front, contour, 1.1)
+
+  -- Openings
+  neck = O(@neck, circle, body+2cm)
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(back.hem2, front_right.hem, plain)
+    >>     S(back.side_l, front_right.inseam, plain)
+    >>     S(back.side_r, front_left.outseam, plain)
+    >>     S(back.hem, front_left.hem, plain)
+    >>     S(rfsleeve.cap, front_right.crotch, plain)
+    >>     S(rbsleeve.cap, back.armhole_l, plain)
+    >>     S(lfsleeve.cap, front_left.crotch, plain)
+    >>     S(lbsleeve.cap, back.armhole_r2, plain)
+    >>     S(lbsleeve.top, lfsleeve.cuff, plain)
+    >>     S(lbsleeve.cuff, lfsleeve.top, plain)
+    >>     S(rbsleeve.cuff, rfsleeve.top, plain)
+    >>     S(rbsleeve.top, rfsleeve.cuff, plain)
+}

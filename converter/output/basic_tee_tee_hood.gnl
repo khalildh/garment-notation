@@ -1,0 +1,36 @@
+GARMENT basic_tee_tee_hood [SYM] {
+
+  -- Panels
+  lfsleeve = P(%arm.L, contour, 1.1)
+  back = P(%torso.back, contour, 0.98)
+  lbsleeve = P(%arm.L, contour, 1.1)
+  rfsleeve = P(%arm.R, contour, 1.1)
+  rbsleeve = P(%arm.R, contour, 1.1)
+  front = P(%torso.front, contour, 0.94)
+  Lhood = P(%torso.front, contour, 1.1)
+  Rhood = P(%torso.front, contour, 1.1)
+
+  -- Openings
+  neck = O(@neck, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(back.hem3, front.hem, plain)
+    >>     S(back.side_l, front.side_l, plain)
+    >>     S(back.side_r, front.side_r, plain)
+    >>     S(back.hem2, front.hem2, plain)
+    >>     S(rfsleeve.cap, front.armhole_l, plain)
+    >>     S(rbsleeve.cap, back.armhole_l, plain)
+    >>     S(lfsleeve.cap, front.armhole_r, plain)
+    >>     S(lbsleeve.cap, back.armhole_r, plain)
+    >>     S(lbsleeve.top, lfsleeve.cuff, plain)
+    >>     S(lbsleeve.cuff, lfsleeve.top, plain)
+    >>     S(rbsleeve.cuff, rfsleeve.top, plain)
+    >>     S(rbsleeve.top, rfsleeve.cuff, plain)
+    >>     S(Rhood.top, Lhood.hem, plain)
+    >>     S(Rhood.right, Lhood.right, plain)
+    >>     S(Rhood.edge, front.side, plain)
+    >>     S(Lhood.edge, front.side2, plain)
+    >>     S(Rhood.hem, back.hem4, plain)
+    >>     S(Lhood.top, back.hem, plain)
+}

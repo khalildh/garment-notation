@@ -1,0 +1,34 @@
+GARMENT skirts_skirt_8_panels {
+
+  -- Panels
+  back = P(%torso.back, contour, 1.1)
+  right_0 = P(%torso.front, contour, 1.1)
+  right_1 = P(%torso.front, contour, 1.1)
+  right_2 = P(%torso.front, contour, 1.1)
+  left_0 = P(%torso.front, contour, 1.1)
+  left_1 = P(%torso.front, contour, 1.1)
+  left_2 = P(%torso.front, contour, 1.1)
+  front = P(%torso.front, contour, 1.1)
+
+  -- Openings
+  hem = O(@knee, circle, body+10cm)
+
+  -- Build order
+  BUILD:
+    S(back.side_r, right_0.left2, plain)
+    >>     S(back.side_r2, right_0.left, plain)
+    >>     S(right_0.right, right_1.left2, plain)
+    >>     S(right_0.right2, right_1.left, plain)
+    >>     S(right_1.right, right_2.left2, plain)
+    >>     S(right_1.right2, right_2.left, plain)
+    >>     S(right_2.right, front.side_l2, plain)
+    >>     S(right_2.right2, front.side_l, plain)
+    >>     S(front.side_r, left_2.left2, plain)
+    >>     S(front.side_r2, left_2.left, plain)
+    >>     S(left_2.right, left_1.left2, plain)
+    >>     S(left_2.right2, left_1.left, plain)
+    >>     S(left_1.right, left_0.left2, plain)
+    >>     S(left_1.right2, left_0.left, plain)
+    >>     S(left_0.right, back.side_l2, plain)
+    >>     S(left_0.right2, back.side_l, plain)
+}

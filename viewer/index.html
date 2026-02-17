@@ -132,6 +132,40 @@ textarea::selection {
 .status.ok { color: #4ade80; }
 .status.error { color: #f87171; }
 
+.source-toggle {
+  display: flex;
+  gap: 2px;
+  background: #334155;
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.src-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+  color: #94a3b8;
+  transition: all 0.15s;
+}
+
+.src-btn.active {
+  background: #475569;
+  color: #f1f5f9;
+}
+
+.src-btn:hover:not(.active) {
+  color: #cbd5e1;
+}
+
+#json-viewer {
+  color: #94a3b8;
+  cursor: default;
+}
+
 .view-toggle {
   display: flex;
   gap: 2px;
@@ -177,12 +211,20 @@ textarea::selection {
     <div class="header-right">
       <select id="examples">
         <option value="">Load example...</option>
-        <option value="tshirt">T-Shirt</option>
-        <option value="wrap_skirt">Wrap Skirt</option>
-        <option value="jacket_collar">Jacket Collar</option>
-        <option value="blazer">Blazer (inline)</option>
-        <option value="composed_blazer">Blazer (composed)</option>
-        <option value="fitted_dress">Fitted Dress (princess + lining)</option>
+        <optgroup label="Hand-authored GNL">
+          <option value="tshirt">T-Shirt</option>
+          <option value="wrap_skirt">Wrap Skirt</option>
+          <option value="jacket_collar">Jacket Collar</option>
+          <option value="blazer">Blazer (inline)</option>
+          <option value="composed_blazer">Blazer (composed)</option>
+          <option value="fitted_dress">Fitted Dress (princess + lining)</option>
+        </optgroup>
+        <optgroup label="Korosteleva Dataset (auto-converted)">
+          <option value="k_tee">Basic Tee</option>
+          <option value="k_skirt">Skirt (2-panel)</option>
+          <option value="k_pants">Pants (straight)</option>
+          <option value="k_dress">Dress (bodice + skirt)</option>
+        </optgroup>
       </select>
       <a href="../docs/">Docs</a>
       <a href="https://github.com/khalildh/garment-notation/blob/main/garment-notation.md">Spec</a>
@@ -190,8 +232,15 @@ textarea::selection {
   </div>
   <div class="main">
     <div class="editor-pane">
-      <div class="pane-label">Source</div>
+      <div class="pane-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Source</span>
+        <div id="source-toggle" class="source-toggle" style="display:none;">
+          <button class="src-btn active" data-src="gnl">GNL</button>
+          <button class="src-btn" data-src="json">JSON</button>
+        </div>
+      </div>
       <textarea id="editor" spellcheck="false"></textarea>
+      <textarea id="json-viewer" spellcheck="false" readonly style="display:none;"></textarea>
     </div>
     <div class="viewer-pane">
       <div class="pane-label" style="display:flex; align-items:center; justify-content:space-between;">

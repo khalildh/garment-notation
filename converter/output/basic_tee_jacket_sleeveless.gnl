@@ -1,0 +1,17 @@
+GARMENT basic_tee_jacket_sleeveless {
+
+  -- Panels
+  back = P(%torso.back, contour, 0.98)
+  front_right = P(%torso.front, contour, 1.1)
+  front_left = P(%torso.front, contour, 1.1)
+
+  -- Openings
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(back.hem2, front_right.hem, plain)
+    >>     S(back.side_l, front_right.inseam, plain)
+    >>     S(back.side_r, front_left.outseam, plain)
+    >>     S(back.hem, front_left.hem, plain)
+}

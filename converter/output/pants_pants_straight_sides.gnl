@@ -1,0 +1,21 @@
+GARMENT pants_pants_straight_sides [SYM] {
+
+  -- Panels
+  Lback = P(%leg.L, contour, 1.25)
+  Rback = P(%leg.R, contour, 1.25)
+  Rfront = P(%leg.R, contour, 0.89)
+  Lfront = P(%leg.L, contour, 0.89)
+
+  -- Openings
+  leg_hem = O(@ankle, circle, body+4cm)
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(Rfront.waist_curve, Rback.waist_curve2, plain)
+    >>     S(Rfront.waist_curve2, Rback.waist_curve, plain)
+    >>     S(Lfront.waist_curve2, Lback.waist_curve, plain)
+    >>     S(Lfront.waist_curve, Lback.waist_curve2, plain)
+    >>     S(Rback.crotch, Lback.crotch, plain)
+    >>     S(Rfront.crotch, Lfront.crotch, plain)
+}

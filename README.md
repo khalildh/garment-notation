@@ -54,11 +54,21 @@ Toggle to "Pieces" to see the individual flat pattern pieces with shape outlines
 
 ![T-Shirt — pattern pieces](images/tshirt-pieces.png)
 
+## Korosteleva Dataset Converter
+
+The repo includes a [converter](converter/) that transforms garment templates from the [Korosteleva NeurIPS 2021 dataset](https://github.com/maria-korosteleva/Garment-Pattern-Generator) (2D panel geometry as JSON) into GNL.
+
+```sh
+# Auto-downloads 21 templates from GitHub on first run, converts all
+node converter/convert.js
+```
+
+Four example templates (tee, skirt, pants, dress) are also available directly in the viewer — select from the "Korosteleva Dataset" section of the examples dropdown. A GNL/JSON toggle lets you compare the raw geometric input with the converted semantic output.
+
+See [converter/README.md](converter/README.md) for details on the mapping approach.
+
 ## Documentation
 
-- **[Syntax Reference](docs/syntax-reference.md)** — scannable cheat sheet for all GNL constructs
-- **[Viewer & Architecture Guide](docs/viewer.md)** — how to run the viewer, pipeline overview, file-by-file guide
-- **[Contributing](docs/contributing.md)** — project structure, code style, areas for contribution
 - **[Full Specification](garment-notation.md)** — the complete v0.2 spec
 
 ## Status

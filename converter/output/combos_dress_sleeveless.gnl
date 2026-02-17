@@ -1,0 +1,21 @@
+GARMENT combos_dress_sleeveless {
+
+  -- Panels
+  top_back = P(%torso.back, contour, 0.98)
+  top_front = P(%torso.front, contour, 0.94)
+  skirt_front = P(%torso.front + %leg[0..0.3], contour, 1.45)
+  skirt_back = P(%torso.back + %leg[0..0.3], contour, 1.52)
+
+  -- Build order
+  BUILD:
+    S(top_back.side_l, top_front.side_r, plain)
+    >>     S(top_back.hem2, top_front.hem, plain)
+    >>     S(top_back.hem, top_front.hem2, plain)
+    >>     S(top_back.side_r, top_front.side_l, plain)
+    >>     S(skirt_back.outseam2, skirt_front.inseam, plain)
+    >>     S(skirt_back.outseam, skirt_front.inseam2, plain)
+    >>     S(skirt_back.inseam2, skirt_front.outseam, plain)
+    >>     S(skirt_back.inseam, skirt_front.outseam2, plain)
+    >>     S(skirt_front.hem, top_front.shoulder_r, plain)
+    >>     S(top_back.shoulder_r, skirt_back.hem, plain)
+}

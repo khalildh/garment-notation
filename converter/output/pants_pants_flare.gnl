@@ -1,0 +1,25 @@
+GARMENT pants_pants_flare [SYM] {
+
+  -- Panels
+  Lback = P(%leg.L, contour, 1.25)
+  Rback = P(%leg.R, contour, 1.25)
+  Rfront = P(%leg.R, contour, 0.89)
+  Lfront = P(%leg.L, contour, 0.89)
+
+  -- Openings
+  leg_hem = O(@ankle, circle, body+4cm)
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(Rfront.crotch, Rback.crotch2, plain)
+    >>     S(Rfront.inseam, Rback.outseam, plain)
+    >>     S(Rfront.outseam, Rback.inseam, plain)
+    >>     S(Rfront.crotch2, Rback.crotch, plain)
+    >>     S(Lfront.crotch2, Lback.crotch, plain)
+    >>     S(Lfront.outseam, Lback.inseam, plain)
+    >>     S(Lfront.inseam, Lback.outseam, plain)
+    >>     S(Lfront.crotch, Lback.crotch2, plain)
+    >>     S(Rback.crotch3, Lback.crotch3, plain)
+    >>     S(Rfront.crotch3, Lfront.crotch3, plain)
+}

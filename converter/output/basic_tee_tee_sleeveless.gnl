@@ -1,0 +1,13 @@
+GARMENT basic_tee_tee_sleeveless {
+
+  -- Panels
+  back = P(%torso.back, contour, 0.98)
+  front = P(%torso.front, contour, 0.94)
+
+  -- Build order
+  BUILD:
+    S(back.hem2, front.hem, plain)
+    >>     S(back.side_l, front.side_l, plain)
+    >>     S(back.side_r, front.side_r, plain)
+    >>     S(back.hem, front.hem2, plain)
+}

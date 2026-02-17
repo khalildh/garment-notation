@@ -1,0 +1,28 @@
+GARMENT basic_tee_tee [SYM] {
+
+  -- Panels
+  lfsleeve = P(%arm.L, contour, 1.1)
+  back = P(%torso.back, contour, 0.98)
+  lbsleeve = P(%arm.L, contour, 1.1)
+  rfsleeve = P(%arm.R, contour, 1.1)
+  rbsleeve = P(%arm.R, contour, 1.1)
+  front = P(%torso.front, contour, 0.94)
+
+  -- Openings
+  neck = O(@neck, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(back.hem2, front.hem, plain)
+    >>     S(back.side_l, front.side_l, plain)
+    >>     S(back.side_r, front.side_r, plain)
+    >>     S(back.hem, front.hem2, plain)
+    >>     S(rfsleeve.cap, front.armhole_l, plain)
+    >>     S(rbsleeve.cap, back.armhole_l, plain)
+    >>     S(lfsleeve.cap, front.armhole_r, plain)
+    >>     S(lbsleeve.cap, back.armhole_r2, plain)
+    >>     S(lbsleeve.top, lfsleeve.cuff, plain)
+    >>     S(lbsleeve.cuff, lfsleeve.top, plain)
+    >>     S(rbsleeve.cuff, rfsleeve.top, plain)
+    >>     S(rbsleeve.top, rfsleeve.cuff, plain)
+}

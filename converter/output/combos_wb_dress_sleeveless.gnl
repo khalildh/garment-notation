@@ -1,0 +1,28 @@
+GARMENT combos_wb_dress_sleeveless {
+
+  -- Panels
+  top_back = P(%torso.back, contour, 0.98)
+  top_front = P(%torso.front, contour, 0.94)
+  skirt_front = P(%torso.front + %leg[0..0.3], rect, 1.45)
+  skirt_back = P(%torso.back + %leg[0..0.3], rect, 1.52)
+  wb_back = P(%torso.front, rect, 1.1)
+  wb_front = P(%torso.front, rect, 1.1)
+
+  -- Openings
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(top_back.side_l, top_front.side_r, plain)
+    >>     S(top_back.hem2, top_front.hem, plain)
+    >>     S(top_back.hem, top_front.hem2, plain)
+    >>     S(top_back.side_r, top_front.side_l, plain)
+    >>     S(skirt_back.outseam, skirt_front.inseam, plain)
+    >>     S(skirt_back.inseam, skirt_front.outseam, plain)
+    >>     S(skirt_front.hem, wb_front.waist, plain)
+    >>     S(wb_front.hem, top_front.shoulder_r, plain)
+    >>     S(top_back.shoulder_r, wb_back.hem, plain)
+    >>     S(wb_back.waist, skirt_back.hem, plain)
+    >>     S(wb_back.outseam, wb_front.inseam, plain)
+    >>     S(wb_back.inseam, wb_front.outseam, plain)
+}

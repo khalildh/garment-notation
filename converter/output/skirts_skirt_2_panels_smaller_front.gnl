@@ -1,0 +1,13 @@
+GARMENT skirts_skirt_2_panels_smaller_front {
+
+  -- Panels
+  front = P(%torso.front, contour, 1.33)
+  back = P(%torso.back, contour, 1.73)
+
+  -- Build order
+  BUILD:
+    S(back.side_l2, front.side_l, plain)
+    >>     S(back.side_l, front.side_l2, plain)
+    >>     S(back.side_r2, front.side_r, plain)
+    >>     S(back.side_r, front.side_r2, plain)
+}

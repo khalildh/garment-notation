@@ -2,13 +2,19 @@ import { tokenize } from './tokenizer.js';
 import { parse } from './parser.js';
 import { render } from './renderer.js';
 import { assemble } from './assembler.js';
+import { convert } from '../../converter/korosteleva-to-gnl.js';
+import { KOROSTELEVA_TEMPLATES } from './korosteleva-examples.js';
 
 const editor = document.getElementById('editor');
+const jsonViewer = document.getElementById('json-viewer');
+const sourceToggle = document.getElementById('source-toggle');
+const srcBtns = document.querySelectorAll('.src-btn');
 const viewer = document.getElementById('viewer');
 const status = document.getElementById('status');
 const viewBtns = document.querySelectorAll('.view-btn');
 
 let currentView = 'assembled';
+let activeJsonSource = null; // stores raw JSON string when a Korosteleva template is active
 
 const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
 
@@ -87,13 +93,52 @@ function update() {
 // Initial render
 update();
 
+// Source toggle (JSON / GNL)
+srcBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    srcBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.src;
+    if (mode === 'json') {
+      editor.style.display = 'none';
+      jsonViewer.style.display = '';
+    } else {
+      editor.style.display = '';
+      jsonViewer.style.display = 'none';
+    }
+  });
+});
+
+function showSourceToggle(jsonStr) {
+  activeJsonSource = jsonStr;
+  jsonViewer.value = jsonStr;
+  sourceToggle.style.display = '';
+  // Reset to GNL tab
+  srcBtns.forEach(b => b.classList.toggle('active', b.dataset.src === 'gnl'));
+  editor.style.display = '';
+  jsonViewer.style.display = 'none';
+}
+
+function hideSourceToggle() {
+  activeJsonSource = null;
+  sourceToggle.style.display = 'none';
+  editor.style.display = '';
+  jsonViewer.style.display = 'none';
+}
+
 // Examples dropdown
 const examples = document.getElementById('examples');
 if (examples) {
   examples.addEventListener('change', () => {
     const val = examples.value;
     if (val && EXAMPLES[val]) {
+      hideSourceToggle();
       editor.value = EXAMPLES[val];
+      update();
+    } else if (val && KOROSTELEVA_TEMPLATES[val]) {
+      const tpl = KOROSTELEVA_TEMPLATES[val];
+      editor.value = convert(tpl.json, tpl.name);
+      showSourceToggle(JSON.stringify(tpl.json, null, 2));
       update();
     }
     examples.value = '';

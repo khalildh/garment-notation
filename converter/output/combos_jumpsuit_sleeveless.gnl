@@ -1,0 +1,30 @@
+GARMENT combos_jumpsuit_sleeveless [SYM] {
+
+  -- Panels
+  up_back = P(%torso.back, contour, 0.98)
+  up_front = P(%torso.front, contour, 0.94)
+  Lback = P(%leg.L, contour, 1.13)
+  Rback = P(%leg.R, contour, 1.13)
+  Rfront = P(%leg.R, contour, 1.13)
+  Lfront = P(%leg.L, contour, 1.13)
+
+  -- Openings
+  waist = O(@waist, circle, body+2cm)
+
+  -- Build order
+  BUILD:
+    S(up_back.hem, up_front.hem2, plain)
+    >>     S(up_back.side_r, up_front.side_l, plain)
+    >>     S(up_back.side_l, up_front.side_r, plain)
+    >>     S(up_back.hem2, up_front.hem, plain)
+    >>     S(Rfront.waist_curve, Rback.waist_curve2, plain)
+    >>     S(Rfront.waist_curve2, Rback.waist_curve, plain)
+    >>     S(Lfront.waist_curve2, Lback.waist_curve, plain)
+    >>     S(Lfront.waist_curve, Lback.waist_curve2, plain)
+    >>     S(Rback.crotch, Lback.crotch, plain)
+    >>     S(Rfront.crotch, Lfront.crotch, plain)
+    >>     S(Rfront.hem, up_front.shoulder_l, plain)
+    >>     S(Lfront.hem, up_front.shoulder_r, plain)
+    >>     S(Lback.hem, up_back.shoulder_l, plain)
+    >>     S(Rback.hem, up_back.shoulder_r, plain)
+}

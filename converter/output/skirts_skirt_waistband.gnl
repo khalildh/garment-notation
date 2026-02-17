@@ -1,0 +1,20 @@
+GARMENT skirts_skirt_waistband {
+
+  -- Panels
+  front = P(%torso.front, rect, 1.45)
+  wb_back = P(%torso.front, rect, 1.1)
+  wb_front = P(%torso.front, rect, 1.1)
+  back = P(%torso.back, rect, 1.52)
+
+  -- Openings
+  hem = O(@knee, circle, body+10cm)
+
+  -- Build order
+  BUILD:
+    S(back.side_r, front.side_l, plain)
+    >>     S(back.side_l, front.side_r, plain)
+    >>     S(wb_front.waist, front.hem, plain)
+    >>     S(wb_back.waist, back.hem, plain)
+    >>     S(wb_back.outseam, wb_front.inseam, plain)
+    >>     S(wb_back.inseam, wb_front.outseam, plain)
+}
