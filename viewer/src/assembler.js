@@ -446,12 +446,6 @@ function drawDress(block, panels, edges = [], hasLining = false, overlay = null)
 
   let svg = svgOpen(totalW, totalH, block.name, block.flags);
 
-  // Body overlay (behind garment)
-  if (overlay) {
-    svg += renderBodyOverlay(overlay, 'dress', cx, topY, bw, bh,
-      { hasSleeves: !!sleeve, sleeveLen: sleeveW * SCALE });
-  }
-
   // Features
   const hasPrincessSeams = edges.length > 0;
   const isLined = hasLining || Object.keys(panels).some(n => n.includes('lining'));
@@ -564,6 +558,12 @@ function drawDress(block, panels, edges = [], hasLining = false, overlay = null)
   svg += dimensionLine(cx - hemHalf, dimY + 20, cx + hemHalf, dimY + 20, fmtCm(bodyW + hemFlare * 2) + ' hem');
   svg += dimensionLineV(cx + hemHalf + 16, topY, cx + hemHalf + 16, topY + bh, fmtCm(bodyH));
 
+  // Body overlay (rendered above garment)
+  if (overlay) {
+    svg += renderBodyOverlay(overlay, 'dress', cx, topY, bw, bh,
+      { hasSleeves: !!sleeve, sleeveLen: sleeveW * SCALE });
+  }
+
   svg += '</svg>';
   return svg;
 }
@@ -595,13 +595,6 @@ function drawSkirt(block, panels, edges = [], hasLining = false, overlay = null)
 
   const waistPx = waistW * SCALE;
   const hemPx = hemW * SCALE;
-
-  // Body overlay (behind garment)
-  if (overlay) {
-    const skirtBodyTop = topY + wbH * SCALE;
-    svg += renderBodyOverlay(overlay, 'skirt', cx, skirtBodyTop,
-      waistW * SCALE, skirtH * SCALE, { hasSleeves: false });
-  }
 
   // Waistband
   if (waistband) {
@@ -639,6 +632,13 @@ function drawSkirt(block, panels, edges = [], hasLining = false, overlay = null)
   svg += dimensionLine(cx - hemPx / 2, dimY, cx + hemPx / 2, dimY, fmtCm(hemW) + ' hem');
   svg += dimensionLine(cx - waistPx / 2, topY - 14, cx + waistPx / 2, topY - 14, fmtCm(waistW) + ' waist');
   svg += dimensionLineV(cx + hemPx / 2 + 16, skirtTop, cx + hemPx / 2 + 16, skirtTop + skirtH * SCALE, fmtCm(skirtH));
+
+  // Body overlay (rendered above garment)
+  if (overlay) {
+    const skirtBodyTop = topY + wbH * SCALE;
+    svg += renderBodyOverlay(overlay, 'skirt', cx, skirtBodyTop,
+      waistW * SCALE, skirtH * SCALE, { hasSleeves: false });
+  }
 
   svg += '</svg>';
   return svg;
