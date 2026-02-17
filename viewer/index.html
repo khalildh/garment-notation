@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GNL Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #f1f5f9;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header select {
+  background: #334155;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.header a {
+  color: #94a3b8;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #334155;
+}
+
+.pane-label {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: #1e293b;
+  border-bottom: 1px solid #1e293b;
+}
+
+textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+textarea::selection {
+  background: #334155;
+}
+
+.viewer-pane {
+  display: flex;
+  flex-direction: column;
+  background: #faf9f7;
+  overflow: auto;
+}
+
+.viewer-pane .pane-label {
+  background: #f1efe9;
+  color: #78716c;
+  border-bottom: 1px solid #e7e5e4;
+}
+
+#viewer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#viewer svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.status {
+  padding: 6px 16px;
+  font-size: 11px;
+  background: #1e293b;
+  color: #64748b;
+  border-top: 1px solid #334155;
+}
+
+.status.ok { color: #4ade80; }
+.status.error { color: #f87171; }
+
+@media (max-width: 768px) {
+  .main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .editor-pane { border-right: none; border-bottom: 1px solid #334155; }
+}
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>GNL Viewer</h1>
+    <div class="header-right">
+      <select id="examples">
+        <option value="">Load example...</option>
+        <option value="tshirt">T-Shirt</option>
+        <option value="wrap_skirt">Wrap Skirt</option>
+        <option value="jacket_collar">Jacket Collar</option>
+      </select>
+      <a href="../garment-notation.md">Spec</a>
+    </div>
+  </div>
+  <div class="main">
+    <div class="editor-pane">
+      <div class="pane-label">Source</div>
+      <textarea id="editor" spellcheck="false"></textarea>
+    </div>
+    <div class="viewer-pane">
+      <div class="pane-label">Pattern</div>
+      <div id="viewer"></div>
+    </div>
+  </div>
+  <div id="status" class="status">Ready</div>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
