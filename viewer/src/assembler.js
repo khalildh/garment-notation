@@ -15,6 +15,7 @@
  */
 
 import { getRegionDims, combineRegions, BODY } from './body.js';
+import { renderBodyOverlay } from './overlay.js';
 
 const SCALE = 4;
 const STROKE = '#334155';
@@ -32,9 +33,10 @@ const PRINCESS_COLOR = '#e11d48';
 /**
  * Render assembled garment technical flat as SVG.
  * @param {Program} ast
+ * @param {{ overlay?: { on: boolean, mode: 'silhouette'|'regions' } }} [opts]
  * @returns {string}
  */
-export function assemble(ast) {
+export function assemble(ast, opts = {}) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
   const block = resolveMain(ast);
   const resolved = resolveComponents(block, ast);
@@ -42,13 +44,14 @@ export function assemble(ast) {
   const garmentType = detectGarmentType(panels, resolved);
   const edges = extractEdgeInfo(resolved);
   const hasLining = hasLayerInfo(resolved);
+  const overlay = opts.overlay?.on ? opts.overlay.mode : null;
 
   switch (garmentType) {
-    case 'top': return drawTop(resolved, panels, edges, hasLining);
-    case 'dress': return drawDress(resolved, panels, edges, hasLining);
-    case 'skirt': return drawSkirt(resolved, panels, edges, hasLining);
+    case 'top': return drawTop(resolved, panels, edges, hasLining, overlay);
+    case 'dress': return drawDress(resolved, panels, edges, hasLining, overlay);
+    case 'skirt': return drawSkirt(resolved, panels, edges, hasLining, overlay);
     case 'collar': return drawCollar(resolved, panels);
-    default: return drawGeneric(resolved, panels, edges, hasLining);
+    default: return drawGeneric(resolved, panels, edges, hasLining, overlay);
   }
 }
 
@@ -123,7 +126,7 @@ function detectGarmentType(panels, block) {
 
 // --- Top (t-shirt, blouse, jacket body) ---
 
-function drawTop(block, panels, edges = [], hasLining = false) {
+function drawTop(block, panels, edges = [], hasLining = false, overlay = null) {
   const front = panels.front || panels.front_L || Object.values(panels).find(p => p.region.includes('torso.front'));
   const back = panels.back || Object.values(panels).find(p => p.region.includes('torso.back'));
   const sleeve = panels.sleeve || panels.sleeve_L || Object.values(panels).find(p => p.region.includes('arm'));
@@ -368,13 +371,19 @@ function drawTop(block, panels, edges = [], hasLining = false) {
   // Side dimension
   svg += dimensionLineV(cx + bw / 2 + 16, topY, cx + bw / 2 + 16, topY + bh, fmtCm(bodyH));
 
+  // Body overlay (rendered above garment)
+  if (overlay) {
+    svg += renderBodyOverlay(overlay, 'top', cx, topY, bodyW * SCALE, bodyH * SCALE,
+      { hasSleeves: !!sleeve, sleeveLen: sleeveW * SCALE });
+  }
+
   svg += '</svg>';
   return svg;
 }
 
 // --- Dress ---
 
-function drawDress(block, panels, edges = [], hasLining = false) {
+function drawDress(block, panels, edges = [], hasLining = false, overlay = null) {
   const panelNames = Object.keys(panels);
   const sleeve = Object.values(panels).find(p => p.region.includes('arm'));
 
@@ -436,6 +445,12 @@ function drawDress(block, panels, edges = [], hasLining = false) {
   const waistY = topY + bh * bodiceRatio;
 
   let svg = svgOpen(totalW, totalH, block.name, block.flags);
+
+  // Body overlay (behind garment)
+  if (overlay) {
+    svg += renderBodyOverlay(overlay, 'dress', cx, topY, bw, bh,
+      { hasSleeves: !!sleeve, sleeveLen: sleeveW * SCALE });
+  }
 
   // Features
   const hasPrincessSeams = edges.length > 0;
@@ -555,7 +570,7 @@ function drawDress(block, panels, edges = [], hasLining = false) {
 
 // --- Skirt ---
 
-function drawSkirt(block, panels, edges = [], hasLining = false) {
+function drawSkirt(block, panels, edges = [], hasLining = false, overlay = null) {
   const panelList = Object.entries(panels);
   const mainPanels = panelList.filter(([n, p]) => !n.includes('waistband') && !n.includes('band'));
   const waistband = panelList.find(([n]) => n.includes('waistband') || n.includes('band'));
@@ -580,6 +595,13 @@ function drawSkirt(block, panels, edges = [], hasLining = false) {
 
   const waistPx = waistW * SCALE;
   const hemPx = hemW * SCALE;
+
+  // Body overlay (behind garment)
+  if (overlay) {
+    const skirtBodyTop = topY + wbH * SCALE;
+    svg += renderBodyOverlay(overlay, 'skirt', cx, skirtBodyTop,
+      waistW * SCALE, skirtH * SCALE, { hasSleeves: false });
+  }
 
   // Waistband
   if (waistband) {
@@ -702,8 +724,8 @@ function drawCollar(block, panels) {
 
 // --- Generic fallback ---
 
-function drawGeneric(block, panels, edges = [], hasLining = false) {
-  return drawTop(block, panels, edges, hasLining);
+function drawGeneric(block, panels, edges = [], hasLining = false, overlay = null) {
+  return drawTop(block, panels, edges, hasLining, overlay);
 }
 
 // --- Helpers ---

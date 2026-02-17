@@ -10,12 +10,35 @@ const sourceToggle = document.getElementById('source-toggle');
 const srcBtns = document.querySelectorAll('.src-btn');
 const viewer = document.getElementById('viewer');
 const status = document.getElementById('status');
-const viewBtns = document.querySelectorAll('.view-btn');
+const viewBtns = document.querySelectorAll('.view-btn[data-view]');
 
 let currentView = 'assembled';
+let bodyOverlayOn = false;
+let bodyOverlayMode = 'silhouette'; // 'silhouette' | 'regions'
 let activeJsonSource = null; // raw JSON string when a Korosteleva template is active
 let activeGnlSource = null;  // converted GNL string (saved when switching to JSON view)
 let currentSrcMode = 'gnl';  // 'gnl' or 'json'
+
+// Body overlay controls
+const bodyToggleBtn = document.getElementById('body-toggle');
+const bodyModeToggle = document.getElementById('body-mode-toggle');
+const bodyModeBtns = document.querySelectorAll('.body-mode-btn');
+
+bodyToggleBtn?.addEventListener('click', () => {
+  bodyOverlayOn = !bodyOverlayOn;
+  bodyToggleBtn.classList.toggle('active', bodyOverlayOn);
+  bodyModeToggle.style.display = bodyOverlayOn ? '' : 'none';
+  update();
+});
+
+bodyModeBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    bodyModeBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    bodyOverlayMode = btn.dataset.bodyMode;
+    update();
+  });
+});
 
 const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
 
@@ -56,9 +79,16 @@ viewBtns.forEach(btn => {
     viewBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentView = btn.dataset.view;
+    updateOverlayVisibility();
     update();
   });
 });
+
+function updateOverlayVisibility() {
+  const show = currentView === 'assembled';
+  if (bodyToggleBtn) bodyToggleBtn.style.display = show ? '' : 'none';
+  if (bodyModeToggle) bodyModeToggle.style.display = (show && bodyOverlayOn) ? '' : 'none';
+}
 
 function update() {
   const source = (currentSrcMode === 'json' && activeGnlSource) ? activeGnlSource : editor.value;
@@ -72,7 +102,8 @@ function update() {
   try {
     const tokens = tokenize(source);
     const ast = parse(tokens);
-    const svg = currentView === 'assembled' ? assemble(ast) : render(ast);
+    const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
+    const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast);
     viewer.innerHTML = svg;
 
     const mainBlock = ast.blocks.find(b => b.type === 'garment') || ast.blocks[0];

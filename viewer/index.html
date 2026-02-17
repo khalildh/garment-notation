@@ -191,6 +191,31 @@ textarea::selection {
   color: #44403c;
 }
 
+.body-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d6d3d1;
+  border-radius: 5px;
+  background: transparent;
+  color: #a8a29e;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.body-toggle-btn:hover {
+  color: #78716c;
+  border-color: #a8a29e;
+}
+
+.body-toggle-btn.active {
+  background: #78716c;
+  color: #fff;
+  border-color: #78716c;
+}
+
 @media (max-width: 768px) {
   .main {
     grid-template-columns: 1fr;
@@ -240,9 +265,24 @@ textarea::selection {
     <div class="viewer-pane">
       <div class="pane-label" style="display:flex; align-items:center; justify-content:space-between;">
         <span>Pattern</span>
-        <div class="view-toggle">
-          <button class="view-btn active" data-view="assembled">Assembled</button>
-          <button class="view-btn" data-view="pieces">Pieces</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button id="body-toggle" class="body-toggle-btn" title="Toggle body overlay">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="5" r="3"/>
+              <line x1="12" y1="8" x2="12" y2="16"/>
+              <line x1="8" y1="11" x2="16" y2="11"/>
+              <line x1="10" y1="22" x2="12" y2="16"/>
+              <line x1="14" y1="22" x2="12" y2="16"/>
+            </svg>
+          </button>
+          <div id="body-mode-toggle" class="view-toggle" style="display:none;">
+            <button class="view-btn body-mode-btn active" data-body-mode="silhouette">Silhouette</button>
+            <button class="view-btn body-mode-btn" data-body-mode="regions">Regions</button>
+          </div>
+          <div class="view-toggle">
+            <button class="view-btn active" data-view="assembled">Assembled</button>
+            <button class="view-btn" data-view="pieces">Pieces</button>
+          </div>
         </div>
       </div>
       <div id="viewer"></div>
