@@ -54,9 +54,12 @@ Toggle to "Pieces" to see the individual flat pattern pieces with shape outlines
 
 ![T-Shirt — pattern pieces](images/tshirt-pieces.png)
 
-## Specification
+## Documentation
 
-See [garment-notation.md](garment-notation.md) for the full v0.2 specification.
+- **[Syntax Reference](docs/syntax-reference.md)** — scannable cheat sheet for all GNL constructs
+- **[Viewer & Architecture Guide](docs/viewer.md)** — how to run the viewer, pipeline overview, file-by-file guide
+- **[Contributing](docs/contributing.md)** — project structure, code style, areas for contribution
+- **[Full Specification](garment-notation.md)** — the complete v0.2 spec
 
 ## Status
 

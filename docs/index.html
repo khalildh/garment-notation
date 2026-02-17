@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GNL Documentation</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: auto 1fr;
+  background: #faf9f7;
+  color: #1e293b;
+}
+
+/* Header */
+.header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #f1f5f9;
+}
+
+.header h1 span {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.header-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.header-links a {
+  color: #94a3b8;
+  font-size: 12px;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.header-links a:hover {
+  color: #e2e8f0;
+}
+
+/* Sidebar */
+.sidebar {
+  background: #1e293b;
+  padding: 16px 0;
+  overflow-y: auto;
+  border-right: 1px solid #334155;
+}
+
+.sidebar-label {
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.sidebar a {
+  display: block;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+
+.sidebar a:hover {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.sidebar a.active {
+  background: #334155;
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.sidebar a .doc-desc {
+  display: block;
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+.sidebar a.active .doc-desc {
+  color: #64748b;
+}
+
+/* Content */
+.content {
+  overflow-y: auto;
+  padding: 48px 64px;
+  max-width: 100%;
+}
+
+.content-inner {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+/* Loading / Error */
+.loading {
+  color: #64748b;
+  font-size: 14px;
+  padding: 48px 64px;
+}
+
+.error {
+  color: #ef4444;
+  font-size: 14px;
+  padding: 48px 64px;
+}
+
+/* Markdown content styles */
+.md h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.md h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-top: 40px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e7e5e4;
+  line-height: 1.3;
+}
+
+.md h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 28px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.md h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 20px;
+  margin-bottom: 6px;
+}
+
+.md p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #334155;
+  margin-bottom: 16px;
+}
+
+.md ul, .md ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+.md li {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #334155;
+  margin-bottom: 4px;
+}
+
+.md li > ul, .md li > ol {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.md a {
+  color: #2563eb;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.md a:hover {
+  border-bottom-color: #2563eb;
+}
+
+.md strong {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.md hr {
+  border: none;
+  border-top: 1px solid #e7e5e4;
+  margin: 32px 0;
+}
+
+.md blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  color: #475569;
+  background: #f8fafc;
+  border-radius: 0 4px 4px 0;
+}
+
+.md blockquote p {
+  margin-bottom: 0;
+  color: #475569;
+}
+
+/* Code */
+.md code {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  background: #f1efe9;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #1e293b;
+}
+
+.md pre {
+  margin-bottom: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+}
+
+.md pre code {
+  display: block;
+  padding: 16px;
+  background: none;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 0;
+}
+
+/* Tables */
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.md thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 2px solid #d6d3d1;
+  background: #f5f5f4;
+}
+
+.md tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e7e5e4;
+  color: #334155;
+  vertical-align: top;
+}
+
+.md tbody tr:hover {
+  background: #fafaf9;
+}
+
+.md tbody td code {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* Mobile menu button */
+.menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  body {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 37px;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 37px 0 0 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 99;
+  }
+
+  .overlay.open {
+    display: block;
+  }
+
+  .content {
+    padding: 32px 20px;
+  }
+
+  .md h1 { font-size: 24px; }
+  .md h2 { font-size: 18px; }
+
+  .md pre code {
+    font-size: 12px;
+  }
+
+  .md table {
+    font-size: 13px;
+    display: block;
+    overflow-x: auto;
+  }
+}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">&#9776;</button>
+      <h1>GNL <span>Documentation</span></h1>
+    </div>
+    <div class="header-links">
+      <a href="../viewer/">Viewer</a>
+      <a href="https://github.com/khalildh/garment-notation">GitHub</a>
+    </div>
+  </div>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-label">Documentation</div>
+    <nav id="nav">
+      <a href="#syntax-reference" data-file="syntax-reference.md">
+        Syntax Reference
+        <span class="doc-desc">GNL quick cheat sheet</span>
+      </a>
+      <a href="#viewer" data-file="viewer.md">
+        Viewer Guide
+        <span class="doc-desc">Architecture &amp; usage</span>
+      </a>
+      <a href="#contributing" data-file="contributing.md">
+        Contributing
+        <span class="doc-desc">How to contribute</span>
+      </a>
+      <a href="#spec" data-file="../garment-notation.md">
+        Full Specification
+        <span class="doc-desc">Complete GNL spec v0.2</span>
+      </a>
+    </nav>
+  </aside>
+
+  <div class="overlay" id="overlay"></div>
+
+  <main class="content" id="content">
+    <div class="content-inner" id="contentInner">
+      <p class="loading">Loading...</p>
+    </div>
+  </main>
+
+  <script>
+    const nav = document.getElementById('nav');
+    const contentInner = document.getElementById('contentInner');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    const menuToggle = document.getElementById('menuToggle');
+    const links = nav.querySelectorAll('a');
+    const cache = {};
+
+    // Map hash to nav link
+    function linkForHash(hash) {
+      const h = hash || '#syntax-reference';
+      return nav.querySelector(`a[href="${h}"]`) || links[0];
+    }
+
+    // Load and render a doc
+    async function loadDoc(link) {
+      const file = link.dataset.file;
+
+      // Update active state
+      links.forEach(a => a.classList.remove('active'));
+      link.classList.add('active');
+
+      // Close mobile menu
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+
+      // Show loading
+      if (!cache[file]) {
+        contentInner.innerHTML = '<p class="loading">Loading...</p>';
+      }
+
+      try {
+        if (!cache[file]) {
+          const res = await fetch(file);
+          if (!res.ok) throw new Error(`Failed to load ${file}`);
+          cache[file] = await res.text();
+        }
+
+        contentInner.innerHTML = '<div class="md">' + marked.parse(cache[file]) + '</div>';
+        // Scroll to top
+        document.getElementById('content').scrollTop = 0;
+      } catch (err) {
+        contentInner.innerHTML = `<p class="error">Could not load document: ${err.message}</p>`;
+      }
+    }
+
+    // Handle nav clicks
+    nav.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (!link) return;
+      e.preventDefault();
+      history.pushState(null, '', link.getAttribute('href'));
+      loadDoc(link);
+    });
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', () => {
+      loadDoc(linkForHash(location.hash));
+    });
+
+    // Mobile menu toggle
+    menuToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    // Initial load
+    loadDoc(linkForHash(location.hash));
+  </script>
+</body>
+</html>
