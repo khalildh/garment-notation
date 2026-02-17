@@ -1,10 +1,14 @@
 import { tokenize } from './tokenizer.js';
 import { parse } from './parser.js';
 import { render } from './renderer.js';
+import { assemble } from './assembler.js';
 
 const editor = document.getElementById('editor');
 const viewer = document.getElementById('viewer');
 const status = document.getElementById('status');
+const viewBtns = document.querySelectorAll('.view-btn');
+
+let currentView = 'assembled';
 
 const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
 
@@ -40,10 +44,19 @@ editor.addEventListener('input', () => {
   debounceTimer = setTimeout(update, 250);
 });
 
+viewBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    viewBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    update();
+  });
+});
+
 function update() {
   const source = editor.value;
   if (!source.trim()) {
-    viewer.innerHTML = render({ blocks: [] });
+    viewer.innerHTML = '';
     status.textContent = 'Empty';
     status.className = 'status';
     return;
@@ -52,7 +65,7 @@ function update() {
   try {
     const tokens = tokenize(source);
     const ast = parse(tokens);
-    const svg = render(ast);
+    const svg = currentView === 'assembled' ? assemble(ast) : render(ast);
     viewer.innerHTML = svg;
 
     const block = ast.blocks[0];
