@@ -207,14 +207,15 @@ function drawTop(block, panels, edges = [], hasLining = false) {
     return op?.type === 'call' && op.name === 'C' && op.args?.some(a => a.type === 'call' && a.name === 'button');
   });
   const buttonCount = (() => {
+    let max = 0;
     for (const s of block.build) {
       const op = s.operation;
       if (op?.type === 'call' && op.name === 'C') {
         const btnArg = op.args?.find(a => a.type === 'call' && a.name === 'button');
-        if (btnArg?.args?.[0]?.type === 'number') return btnArg.args[0].value;
+        if (btnArg?.args?.[0]?.type === 'number') max = Math.max(max, btnArg.args[0].value);
       }
     }
-    return 0;
+    return max;
   })();
 
   if (hasCollar) {
@@ -263,8 +264,8 @@ function drawTop(block, panels, edges = [], hasLining = false) {
 
   // Buttons
   if (hasButtons && buttonCount > 0) {
-    const btnStart = topY + bh * 0.35;
-    const btnEnd = topY + bh * 0.75;
+    const btnStart = topY + bh * (buttonCount > 4 ? 0.12 : 0.35);
+    const btnEnd = topY + bh * (buttonCount > 4 ? 0.85 : 0.75);
     const btnSpacing = buttonCount > 1 ? (btnEnd - btnStart) / (buttonCount - 1) : 0;
     for (let i = 0; i < buttonCount; i++) {
       const by = buttonCount > 1 ? btnStart + btnSpacing * i : (btnStart + btnEnd) / 2;
