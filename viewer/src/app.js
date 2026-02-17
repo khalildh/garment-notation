@@ -6,7 +6,6 @@ import { convert } from '../../converter/korosteleva-to-gnl.js';
 import { KOROSTELEVA_TEMPLATES } from './korosteleva-examples.js';
 
 const editor = document.getElementById('editor');
-const jsonViewer = document.getElementById('json-viewer');
 const sourceToggle = document.getElementById('source-toggle');
 const srcBtns = document.querySelectorAll('.src-btn');
 const viewer = document.getElementById('viewer');
@@ -14,7 +13,9 @@ const status = document.getElementById('status');
 const viewBtns = document.querySelectorAll('.view-btn');
 
 let currentView = 'assembled';
-let activeJsonSource = null; // stores raw JSON string when a Korosteleva template is active
+let activeJsonSource = null; // raw JSON string when a Korosteleva template is active
+let activeGnlSource = null;  // converted GNL string (saved when switching to JSON view)
+let currentSrcMode = 'gnl';  // 'gnl' or 'json'
 
 const DEFAULT_SOURCE = `GARMENT t_shirt [SYM] {
 
@@ -60,7 +61,7 @@ viewBtns.forEach(btn => {
 });
 
 function update() {
-  const source = editor.value;
+  const source = (currentSrcMode === 'json' && activeGnlSource) ? activeGnlSource : editor.value;
   if (!source.trim()) {
     viewer.innerHTML = '';
     status.textContent = 'Empty';
@@ -93,37 +94,61 @@ function update() {
 // Initial render
 update();
 
-// Source toggle (JSON / GNL)
+// Source toggle (JSON / GNL) — single textarea, swap content
 srcBtns.forEach(btn => {
   btn.addEventListener('click', () => {
+    const mode = btn.dataset.src;
+    if (mode === currentSrcMode) return;
     srcBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const mode = btn.dataset.src;
+    currentSrcMode = mode;
     if (mode === 'json') {
-      editor.style.display = 'none';
-      jsonViewer.style.display = '';
+      activeGnlSource = editor.value;
+      editor.value = activeJsonSource;
+      editor.readOnly = true;
+      editor.style.color = '#94a3b8';
     } else {
-      editor.style.display = '';
-      jsonViewer.style.display = 'none';
+      editor.value = activeGnlSource;
+      editor.readOnly = false;
+      editor.style.color = '';
     }
   });
 });
 
 function showSourceToggle(jsonStr) {
   activeJsonSource = jsonStr;
-  jsonViewer.value = jsonStr;
+  activeGnlSource = editor.value;
+  currentSrcMode = 'gnl';
   sourceToggle.style.display = '';
-  // Reset to GNL tab
   srcBtns.forEach(b => b.classList.toggle('active', b.dataset.src === 'gnl'));
-  editor.style.display = '';
-  jsonViewer.style.display = 'none';
+  editor.readOnly = false;
+  editor.style.color = '';
 }
 
 function hideSourceToggle() {
   activeJsonSource = null;
+  activeGnlSource = null;
+  currentSrcMode = 'gnl';
   sourceToggle.style.display = 'none';
-  editor.style.display = '';
-  jsonViewer.style.display = 'none';
+  editor.readOnly = false;
+  editor.style.color = '';
+}
+
+async function loadKorostelevaTemplate(tpl) {
+  status.textContent = 'Loading...';
+  status.className = 'status';
+  try {
+    const res = await fetch(tpl.path);
+    if (!res.ok) throw new Error(`Failed to fetch ${tpl.path}`);
+    const jsonText = await res.text();
+    const json = JSON.parse(jsonText);
+    editor.value = convert(json, tpl.name);
+    showSourceToggle(jsonText);
+    update();
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = 'status error';
+  }
 }
 
 // Examples dropdown
@@ -137,9 +162,7 @@ if (examples) {
       update();
     } else if (val && KOROSTELEVA_TEMPLATES[val]) {
       const tpl = KOROSTELEVA_TEMPLATES[val];
-      editor.value = convert(tpl.json, tpl.name);
-      showSourceToggle(JSON.stringify(tpl.json, null, 2));
-      update();
+      loadKorostelevaTemplate(tpl);
     }
     examples.value = '';
   });
