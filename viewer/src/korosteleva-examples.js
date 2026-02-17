@@ -6,21 +6,21 @@ export const KOROSTELEVA_TEMPLATES = {
   k_tee: {
     name: 'basic_tee',
     label: 'Basic Tee',
-    path: '../../converter/examples/tee.json',
+    path: '../converter/examples/tee.json',
   },
   k_skirt: {
     name: 'skirt_2_panels',
     label: 'Skirt (2-panel)',
-    path: '../../converter/examples/skirt_2_panels.json',
+    path: '../converter/examples/skirt_2_panels.json',
   },
   k_pants: {
     name: 'pants_straight_sides',
     label: 'Pants (straight)',
-    path: '../../converter/examples/pants_straight.json',
+    path: '../converter/examples/pants_straight.json',
   },
   k_dress: {
     name: 'dress',
     label: 'Dress (bodice + skirt)',
-    path: '../../converter/examples/dress.json',
+    path: '../converter/examples/dress.json',
   },
 };
