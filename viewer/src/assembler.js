@@ -137,6 +137,28 @@ function drawTop(block, panels, edges = [], hasLining = false) {
 
   let svg = svgOpen(totalW, totalH, block.name, block.flags);
 
+  // Detect features (before drawing so sleeves can use hasCuffButtons)
+  const hasCollar = Object.keys(panels).some(n => n.includes('collar') || n.includes('lapel'));
+  const hasWelt = Object.keys(panels).some(n => n.includes('welt') || n.includes('pocket'));
+  const hasPrincessSeams = edges.length > 0;
+  const isLined = hasLining || Object.keys(panels).some(n => n.includes('lining'));
+
+  const buttonClosures = [];
+  for (const s of block.build) {
+    const op = s.operation;
+    if (op?.type === 'call' && op.name === 'C') {
+      const btnArg = op.args?.find(a => a.type === 'call' && a.name === 'button');
+      if (btnArg?.args?.[0]?.type === 'number') {
+        const target = op.args?.[0]?.type === 'reference' ? op.args[0].value : '';
+        buttonClosures.push({ target, count: btnArg.args[0].value });
+      }
+    }
+  }
+  const hasButtons = buttonClosures.length > 0;
+  const hasCuffButtons = buttonClosures.some(b => b.target.includes('cuff'));
+  const frontButtons = buttonClosures.find(b => !b.target.includes('cuff'));
+  const buttonCount = frontButtons?.count ?? 0;
+
   // --- Left sleeve ---
   if (sleeve) {
     const sx = cx - bodyW * SCALE / 2;
@@ -157,6 +179,14 @@ function drawTop(block, panels, edges = [], hasLining = false) {
     const cuffInset = sw * 0.08;
     svg += `<line x1="${sx - sw + cuffInset}" y1="${sy + sh * 0.18}" x2="${sx - sw * cuffTaper + cuffInset}" y2="${sy + sh * 0.97}"
       stroke="${STITCH_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+
+    // Cuff button (left sleeve)
+    if (hasCuffButtons) {
+      const cbx = sx - sw * ((1 + cuffTaper) / 2) + cuffInset * 0.5;
+      const cby = sy + sh * 0.85;
+      svg += `<circle cx="${cbx}" cy="${cby}" r="2.5" fill="none" stroke="${STROKE}" stroke-width="0.8"/>`;
+      svg += `<circle cx="${cbx}" cy="${cby}" r="0.8" fill="${STROKE}"/>`;
+    }
   }
 
   // --- Right sleeve ---
@@ -178,6 +208,14 @@ function drawTop(block, panels, edges = [], hasLining = false) {
     const cuffInset = sw * 0.08;
     svg += `<line x1="${sx + sw - cuffInset}" y1="${sy + sh * 0.18}" x2="${sx + sw * cuffTaper - cuffInset}" y2="${sy + sh * 0.97}"
       stroke="${STITCH_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+
+    // Cuff button (right sleeve)
+    if (hasCuffButtons) {
+      const cbx = sx + sw * ((1 + cuffTaper) / 2) - cuffInset * 0.5;
+      const cby = sy + sh * 0.85;
+      svg += `<circle cx="${cbx}" cy="${cby}" r="2.5" fill="none" stroke="${STROKE}" stroke-width="0.8"/>`;
+      svg += `<circle cx="${cbx}" cy="${cby}" r="0.8" fill="${STROKE}"/>`;
+    }
   }
 
   // --- Body ---
@@ -196,27 +234,6 @@ function drawTop(block, panels, edges = [], hasLining = false) {
     Q ${cx - bw / 2 + waistIndent},${topY + bh * 0.55} ${cx - bw / 2},${topY + shoulderSlope * SCALE}
     Z
   " fill="${FILL_FRONT}" stroke="${STROKE}" stroke-width="1.5" stroke-linejoin="round"/>`;
-
-  // Detect features
-  const hasCollar = Object.keys(panels).some(n => n.includes('collar') || n.includes('lapel'));
-  const hasWelt = Object.keys(panels).some(n => n.includes('welt') || n.includes('pocket'));
-  const hasPrincessSeams = edges.length > 0;
-  const isLined = hasLining || Object.keys(panels).some(n => n.includes('lining'));
-  const hasButtons = block.build.some(s => {
-    const op = s.operation;
-    return op?.type === 'call' && op.name === 'C' && op.args?.some(a => a.type === 'call' && a.name === 'button');
-  });
-  const buttonCount = (() => {
-    let max = 0;
-    for (const s of block.build) {
-      const op = s.operation;
-      if (op?.type === 'call' && op.name === 'C') {
-        const btnArg = op.args?.find(a => a.type === 'call' && a.name === 'button');
-        if (btnArg?.args?.[0]?.type === 'number') max = Math.max(max, btnArg.args[0].value);
-      }
-    }
-    return max;
-  })();
 
   if (hasCollar) {
     // Lapel lines
