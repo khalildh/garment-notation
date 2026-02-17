@@ -4,6 +4,8 @@ A formal descriptive language for clothing construction.
 
 Dance has Labanotation. Music has staff notation. Architecture has plan/section/elevation conventions. GNL brings the same rigor to garments — a generative descriptive language where a valid expression is sufficient to construct a garment without ambiguity.
 
+![T-Shirt — assembled view](images/tshirt-assembled.png)
+
 ## Core Concepts
 
 - **Body-anchored** — the body is the coordinate system, using anatomical landmarks (`@shoulder.L`) and regions (`%torso.front`)
@@ -31,6 +33,24 @@ GARMENT t_shirt [SYM] {
     >> F(hem, 2.5cm, in)
 }
 ```
+
+## Viewer
+
+The repo includes a live viewer that parses GNL and renders both assembled garment views and flat pattern pieces. Open `viewer/index.html` to try it.
+
+### Assembled View
+
+Write GNL on the left, see the full garment on the right — with stitch lines, dimension callouts, and construction details.
+
+| T-Shirt | Wrap Skirt | Jacket Collar |
+|---------|------------|---------------|
+| ![T-Shirt](images/tshirt-assembled.png) | ![Wrap Skirt](images/wrap-skirt-assembled.png) | ![Jacket Collar](images/collar-assembled.png) |
+
+### Pattern Pieces
+
+Toggle to "Pieces" to see the individual flat pattern pieces with shape outlines, grain lines, and dimensions.
+
+![T-Shirt — pattern pieces](images/tshirt-pieces.png)
 
 ## Specification
 
