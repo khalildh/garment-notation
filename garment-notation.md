@@ -2,7 +2,7 @@
 
 ### A Formal Descriptive Language for Clothing
 
-**Version 0.1 — Draft Specification**
+**Version 0.2 — Draft Specification**
 
 ---
 
@@ -74,20 +74,32 @@ Regions can be subdivided with a fractional range:
 The fundamental unit: a flat piece of fabric that maps onto a body region.
 
 ```
-P(region, shape, ease)
+P(region, shape, ease, grain)
 ```
 
 - **region**: the body region it covers
 - **shape**: geometric outline — `rect`, `trapezoid`, `circle`, `contour` (body-mapped), or parametric curves
-- **ease**: fit modifier as a ratio (1.0 = skin-tight, 1.5 = 50% extra, 3.0 = voluminous)
+- **ease**: fit at the panel's relationship to the body, expressed as either:
+  - A single ratio: `1.05` (uniform 5% ease across the panel)
+  - A top/bottom pair: `ease(1.0, 2.5)` (fitted at top, flared at bottom — e.g. A-line)
+  - Ease describes the panel's *base dimensions* relative to the body. Fullness *distribution* — how excess fabric behaves — is controlled by operators (`G`, `PL`, `DR`) in the build chain, not by ease itself.
+- **grain**: fabric grain direction relative to the panel (optional, default `warp`)
+  - `warp` — lengthwise grain runs vertically (standard)
+  - `weft` — crosswise grain runs vertically
+  - `bias` or `45°` — cut on the 45° bias
+  - Any angle: `30°`, `60°`, etc.
 
 Examples:
 
 ```
-P(%torso.front, contour, 1.05)   — a fitted front bodice panel
-P(%leg.L, rect, 2.5)             — a very full rectangular skirt/leg panel
-P(%arm.L, contour, 1.0)          — a skin-tight sleeve
+P(%torso.front, contour, 1.05)                — a fitted front bodice panel, warp grain (default)
+P(%leg.L, rect, ease(1.0, 2.5))               — A-line: fitted at waist, flared at hem
+P(%arm.L, contour, 1.0)                        — a skin-tight sleeve
+P(%torso.front, contour, 1.1, bias)            — bias-cut front panel (for drape)
+P(%torso.front, contour, 1.1, grain=weft)      — crossgrain panel
 ```
+
+> **v0.2 note**: In v0.1, ease was a single scalar that was ambiguous about fullness distribution. A `P(%leg, rect, 2.5)` could be a gathered skirt, a pleated one, or a flared circle skirt. The `ease(top, bottom)` form resolves this for shaped panels, while `G`/`PL`/`DR` handle fullness distribution explicitly. Grain was previously only expressible through `DR(..., 45°)`, despite being structurally significant for every panel.
 
 ### 4.2 Opening `O`
 
@@ -184,15 +196,17 @@ F(P_front.bottom, 3cm, in)     — 3cm hem folded inward
 
 ### 5.5 Drape `DR`
 
-Allows fabric to fall under gravity from anchor points (bias cuts, cowls).
+Allows fabric to fall under gravity from anchor points (cowls, draped necklines).
 
 ```
-DR(panel, anchor_points[], grain_angle)
+DR(panel, anchor_points[])
 ```
 
+The panel's `grain` parameter (set on `P`) determines the bias angle. `DR` specifies *where* fabric is anchored; grain determines *how* it falls.
+
 ```
-DR(P_front, [@shoulder.L, @shoulder.R], 45°)   — bias-cut draped front panel
-DR(P_cowl, [@neck], 45°)                        — cowl neckline
+DR(P_front, [@shoulder.L, @shoulder.R])   — draped front (combine with grain=bias on P)
+DR(P_cowl, [@neck])                        — cowl neckline
 ```
 
 ### 5.6 Stretch `ST`
@@ -354,7 +368,7 @@ COMPONENT notched_lapel {
 |--------|----------------------|----------------------------------|
 | `@`    | Body landmark        | `@shoulder.L`                    |
 | `%`    | Body region          | `%torso.front`                   |
-| `P`    | Panel                | `P(%arm.L, contour, 1.1)`       |
+| `P`    | Panel                | `P(%arm.L, contour, 1.1, bias)` |
 | `O`    | Opening              | `O(@neck, V, depth=12cm)`       |
 | `S`    | Seam                 | `S(P1.edge, P2.edge, french)`   |
 | `D`    | Dart                 | `D(P, @bust.L, 10°, 8cm)`      |
@@ -395,4 +409,4 @@ COMPONENT notched_lapel {
 
 ---
 
-*GNL v0.1 — A starting point. Like early Labanotation, this will need refinement through use, critique, and the input of garment-makers, pattern-drafters, and computational designers.*
+*GNL v0.2 — A starting point. Like early Labanotation, this will need refinement through use, critique, and the input of garment-makers, pattern-drafters, and computational designers.*

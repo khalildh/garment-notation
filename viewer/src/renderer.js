@@ -67,19 +67,46 @@ function extractPanels(block) {
       const regionExpr = args[0];
       const shapeExpr = args[1];
       const easeExpr = args[2];
+      const grainExpr = args[3];
 
       const dims = resolveRegionDims(regionExpr);
-      const ease = resolveNumber(easeExpr) ?? 1.0;
       const shape = resolveShape(shapeExpr);
       const regionName = resolveRegionName(regionExpr);
+
+      // Handle ease(top, bottom) or single scalar
+      let easeTop, easeBottom;
+      if (easeExpr?.type === 'call' && easeExpr.name === 'ease') {
+        easeTop = resolveNumber(easeExpr.args[0]) ?? 1.0;
+        easeBottom = resolveNumber(easeExpr.args[1]) ?? easeTop;
+      } else {
+        const e = resolveNumber(easeExpr) ?? 1.0;
+        easeTop = e;
+        easeBottom = e;
+      }
+
+      // Handle grain parameter (positional or named)
+      let grain = 'warp';
+      const grainArg = grainExpr || args.find(a => a.type === 'named_arg' && a.name === 'grain');
+      if (grainArg) {
+        if (grainArg.type === 'named_arg') {
+          grain = resolveRef(grainArg.value) || 'warp';
+        } else if (grainArg.type === 'reference') {
+          grain = grainArg.value;
+        } else if (grainArg.type === 'number' && grainArg.unit === 'deg') {
+          grain = grainArg.value + '°';
+        }
+      }
 
       panels.push({
         name: decl.name,
         region: regionName,
         shape,
-        ease,
-        widthTop: dims.widthTop * ease,
-        widthBottom: dims.widthBottom * ease,
+        ease: easeTop,
+        easeTop,
+        easeBottom,
+        grain,
+        widthTop: dims.widthTop * easeTop,
+        widthBottom: dims.widthBottom * easeBottom,
         height: dims.height,
         darts: [],
         shapeParams: shapeExpr?.type === 'call' ? shapeExpr : null,
@@ -231,7 +258,7 @@ function renderPanel(p) {
   g += pathEl(path, fill, STROKE);
 
   // Grain line
-  g += grainLine(w, h);
+  g += grainLine(w, h, p.grain);
 
   // Darts
   for (const d of p.darts) {
@@ -245,8 +272,10 @@ function renderPanel(p) {
   const widthCm = Math.max(p.widthTop, p.widthBottom) * p.ease;
   g += `<text x="${w / 2}" y="${h / 2 + 10}" text-anchor="middle" fill="${DIM_COLOR}" font-size="9" font-family="system-ui">${fmtCm(widthCm)} × ${fmtCm(p.height)}</text>`;
 
-  // Shape + ease label
-  g += `<text x="${w / 2}" y="${h / 2 + 22}" text-anchor="middle" fill="${DIM_COLOR}" font-size="8" font-family="system-ui">${p.shape} · ease ${p.ease}</text>`;
+  // Shape + ease + grain label
+  const easeLabel = p.easeTop === p.easeBottom ? `ease ${p.easeTop}` : `ease ${p.easeTop}→${p.easeBottom}`;
+  const grainLabel = p.grain !== 'warp' ? ` · ${p.grain}` : '';
+  g += `<text x="${w / 2}" y="${h / 2 + 22}" text-anchor="middle" fill="${DIM_COLOR}" font-size="8" font-family="system-ui">${p.shape} · ${easeLabel}${grainLabel}</text>`;
 
   g += '</g>';
   return g;
@@ -299,14 +328,35 @@ function pathEl(d, fill, stroke) {
   return `<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/>`;
 }
 
-function grainLine(w, h) {
-  const x = w / 2;
-  const y1 = h * 0.15;
-  const y2 = h * 0.85;
+function grainLine(w, h, grain) {
+  const cx = w / 2;
+  const cy = h / 2;
+  const len = h * 0.35;
   const arrowSize = 5;
+
+  // Determine angle from grain type
+  let angle = 0; // warp = vertical = 0°
+  if (grain === 'weft') angle = 90;
+  else if (grain === 'bias') angle = 45;
+  else if (typeof grain === 'string' && grain.endsWith('°')) angle = parseFloat(grain);
+
+  const rad = angle * Math.PI / 180;
+  const dx = Math.sin(rad) * len;
+  const dy = Math.cos(rad) * len;
+
+  const x1 = cx - dx, y1 = cy - dy;
+  const x2 = cx + dx, y2 = cy + dy;
+
+  // Arrow at top end
+  const aRad = rad;
+  const ax1 = x1 + Math.sin(aRad - 0.4) * arrowSize;
+  const ay1 = y1 + Math.cos(aRad - 0.4) * arrowSize;
+  const ax2 = x1 + Math.sin(aRad + 0.4) * arrowSize;
+  const ay2 = y1 + Math.cos(aRad + 0.4) * arrowSize;
+
   return `
-    <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${GRAIN_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>
-    <polygon points="${x},${y1} ${x - arrowSize / 2},${y1 + arrowSize} ${x + arrowSize / 2},${y1 + arrowSize}" fill="${GRAIN_COLOR}"/>
+    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${GRAIN_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>
+    <polygon points="${x1},${y1} ${ax1},${ay1} ${ax2},${ay2}" fill="${GRAIN_COLOR}"/>
   `;
 }
 
