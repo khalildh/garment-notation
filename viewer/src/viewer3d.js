@@ -94,15 +94,16 @@ export async function create3DView(container, ast) {
   fillLight.position.set(-20, 30, -30);
   scene.add(fillLight);
 
-  // Ground grid
-  const gridHelper = new THREE.GridHelper(100, 20, 0xd1d5db, 0xe5e7eb);
-  gridHelper.position.y = -1;
-  scene.add(gridHelper);
-
-  // Mannequin
-  const mannequin = createMannequin(THREE);
+  // Mannequin (async — loads GLB model)
+  const mannequin = await createMannequin(THREE);
+  if (isDisposed) return;
   scene.add(mannequin.group);
   collisionSpheres = mannequin.collisionSpheres;
+
+  // Ground grid — positioned at foot level
+  const gridHelper = new THREE.GridHelper(100, 20, 0xd1d5db, 0xe5e7eb);
+  gridHelper.position.y = mannequin.footY || -1;
+  scene.add(gridHelper);
 
   // Build garment
   rebuildGarment(ast);
