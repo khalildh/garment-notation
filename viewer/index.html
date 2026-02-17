@@ -121,6 +121,18 @@ textarea::selection {
   max-height: 100%;
 }
 
+#viewer-3d {
+  flex: 1;
+  display: none;
+  position: relative;
+}
+
+#viewer-3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .status {
   padding: 6px 16px;
   font-size: 11px;
@@ -282,10 +294,12 @@ textarea::selection {
           <div class="view-toggle">
             <button class="view-btn active" data-view="assembled">Assembled</button>
             <button class="view-btn" data-view="pieces">Pieces</button>
+            <button class="view-btn" data-view="3d">3D</button>
           </div>
         </div>
       </div>
       <div id="viewer"></div>
+      <div id="viewer-3d"></div>
     </div>
   </div>
   <div id="status" class="status">Ready</div>

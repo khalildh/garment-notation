@@ -6,6 +6,7 @@ import { render } from './renderer.js';
 import { assemble } from './assembler.js';
 import { convert } from '../../converter/korosteleva-to-gnl.js';
 import { KOROSTELEVA_TEMPLATES } from './korosteleva-examples.js';
+import { create3DView, dispose3DView } from './viewer3d.js';
 
 /**
  * Parse GNL source: try PEG parser first, fall back to legacy.
@@ -26,6 +27,7 @@ const editor = document.getElementById('editor');
 const sourceToggle = document.getElementById('source-toggle');
 const srcBtns = document.querySelectorAll('.src-btn');
 const viewer = document.getElementById('viewer');
+const viewer3d = document.getElementById('viewer-3d');
 const status = document.getElementById('status');
 const viewBtns = document.querySelectorAll('.view-btn[data-view]');
 
@@ -97,6 +99,7 @@ viewBtns.forEach(btn => {
     btn.classList.add('active');
     currentView = btn.dataset.view;
     updateOverlayVisibility();
+    updateViewContainers();
     update();
   });
 });
@@ -105,6 +108,13 @@ function updateOverlayVisibility() {
   const show = currentView === 'assembled';
   if (bodyToggleBtn) bodyToggleBtn.style.display = show ? '' : 'none';
   if (bodyModeToggle) bodyModeToggle.style.display = (show && bodyOverlayOn) ? '' : 'none';
+}
+
+function updateViewContainers() {
+  const is3d = currentView === '3d';
+  viewer.style.display = is3d ? 'none' : '';
+  viewer3d.style.display = is3d ? 'flex' : 'none';
+  if (!is3d) dispose3DView();
 }
 
 function update() {
@@ -118,9 +128,17 @@ function update() {
 
   try {
     const ast = parse(source);
-    const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
-    const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast);
-    viewer.innerHTML = svg;
+
+    if (currentView === '3d') {
+      create3DView(viewer3d, ast).catch(err => {
+        status.textContent = '3D: ' + err.message;
+        status.className = 'status error';
+      });
+    } else {
+      const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
+      const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast);
+      viewer.innerHTML = svg;
+    }
 
     const mainBlock = ast.blocks.find(b => b.type === 'garment') || ast.blocks[0];
     const panels = mainBlock?.declarations.filter(d => d.value.type === 'call' && d.value.name === 'P').length ?? 0;
@@ -130,6 +148,7 @@ function update() {
     let statusText = `Parsed: ${panels} panel${panels !== 1 ? 's' : ''}, ${steps} build step${steps !== 1 ? 's' : ''}`;
     if (edgeCount > 0) statusText += `, ${edgeCount} edge${edgeCount !== 1 ? 's' : ''}`;
     if (layerCount > 0) statusText += `, ${layerCount} layer${layerCount !== 1 ? 's' : ''}`;
+    if (currentView === '3d') statusText += ' (3D view)';
     status.textContent = statusText;
     status.className = 'status ok';
   } catch (err) {
