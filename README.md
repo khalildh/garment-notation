@@ -2,6 +2,8 @@
 
 A formal descriptive language for clothing construction.
 
+**[Try the live viewer](https://khalildh.github.io/garment-notation/viewer/)**
+
 Dance has Labanotation. Music has staff notation. Architecture has plan/section/elevation conventions. GNL brings the same rigor to garments — a generative descriptive language where a valid expression is sufficient to construct a garment without ambiguity.
 
 ![T-Shirt — assembled view](images/tshirt-assembled.png)
@@ -36,7 +38,7 @@ GARMENT t_shirt [SYM] {
 
 ## Viewer
 
-The repo includes a live viewer that parses GNL and renders both assembled garment views and flat pattern pieces. Open `viewer/index.html` to try it.
+The repo includes a [live viewer](https://khalildh.github.io/garment-notation/viewer/) that parses GNL and renders both assembled garment views and flat pattern pieces.
 
 ### Assembled View
 
@@ -54,11 +56,11 @@ Toggle to "Pieces" to see the individual flat pattern pieces with shape outlines
 
 ## Specification
 
-See [garment-notation.md](garment-notation.md) for the full v0.1 draft specification.
+See [garment-notation.md](garment-notation.md) for the full v0.2 specification.
 
 ## Status
 
-**v0.1 — Draft.** A starting point that will need refinement through use, critique, and input from garment-makers, pattern-drafters, and computational designers.
+**v0.2 — Draft.** Includes grain parameter, directional ease, princess seams (EDGE), lining (LAYER), and component composition (USE/ATTACH). A starting point that will need refinement through use, critique, and input from garment-makers, pattern-drafters, and computational designers.
 
 ## License
 
