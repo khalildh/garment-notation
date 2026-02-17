@@ -45,6 +45,7 @@ export function assemble(ast) {
 
   switch (garmentType) {
     case 'top': return drawTop(resolved, panels, edges, hasLining);
+    case 'dress': return drawDress(resolved, panels, edges, hasLining);
     case 'skirt': return drawSkirt(resolved, panels, edges, hasLining);
     case 'collar': return drawCollar(resolved, panels);
     default: return drawGeneric(resolved, panels, edges, hasLining);
@@ -107,8 +108,14 @@ function detectGarmentType(panels, block) {
   const hasTorso = names.some(n => n === 'front' || n === 'back') || regions.some(r => r.includes('torso'));
   const hasLeg = regions.some(r => r.includes('leg') && !r.includes('arm'));
 
-  // A collar component alone is 'collar', but collar + body/sleeves is a 'top'
-  if (hasCollar && !hasSleeve && !hasTorso) return 'collar';
+  // A dress combines torso + leg without sleeves or waistband
+  // (blazers/shirts also have torso+leg but have sleeves; skirts have waistbands)
+  const combinesTorsoAndLeg = regions.some(r => r.includes('torso') && r.includes('leg'));
+  const hasWaistband = names.some(n => n.includes('waistband') || n.includes('band'));
+  const isDress = combinesTorsoAndLeg && !hasSleeve && !hasWaistband;
+
+  if (hasCollar && !hasSleeve && !hasTorso && !isDress) return 'collar';
+  if (isDress) return 'dress';
   if (hasSleeve || hasTorso) return 'top';
   if (hasLeg) return 'skirt';
   return 'generic';
@@ -360,6 +367,164 @@ function drawTop(block, panels, edges = [], hasLining = false) {
 
   // Side dimension
   svg += dimensionLineV(cx + bw / 2 + 16, topY, cx + bw / 2 + 16, topY + bh, fmtCm(bodyH));
+
+  svg += '</svg>';
+  return svg;
+}
+
+// --- Dress ---
+
+function drawDress(block, panels, edges = [], hasLining = false) {
+  // Collect all front-facing panels to compute full width
+  const frontPanels = Object.values(panels).filter(p => p.region.includes('torso.front'));
+  const backPanels = Object.values(panels).filter(p => p.region.includes('torso.back'));
+  const sleeve = Object.values(panels).find(p => p.region.includes('arm'));
+
+  // Sum widths of all front panels (handles princess seams)
+  let bodyW = 0;
+  let bodyH = 0;
+  for (const p of (frontPanels.length ? frontPanels : backPanels)) {
+    bodyW += p.dims.widthTop * p.ease;
+    bodyH = Math.max(bodyH, p.dims.height);
+  }
+  if (bodyW === 0) { bodyW = 46; bodyH = 60; }
+
+  // Split into bodice and skirt portions based on torso vs leg contribution
+  const firstFront = frontPanels[0] || backPanels[0];
+  const regionStr = firstFront?.region || '';
+  // Estimate bodice ratio from region: torso portion / total height
+  const bodiceRatio = regionStr.includes('leg') ? 0.55 : 1.0;
+
+  const sleeveW = sleeve ? sleeve.dims.height * (sleeve.ease ?? 1.0) * 0.65 : 0;
+  const sleeveH = sleeve ? sleeve.dims.widthTop * (sleeve.ease ?? 1.0) * 0.55 : 0;
+
+  const neckW = bodyW * 0.32;
+  const neckH = 6;
+  const shoulderSlope = bodyH * 0.04;
+  const waistIndent = bodyW * 0.06;
+  const hemFlare = bodyW * 0.08;
+
+  const totalW = (bodyW + hemFlare * 2 + sleeveW * 2) * SCALE + 120;
+  const totalH = bodyH * SCALE + 140;
+  const cx = totalW / 2;
+  const topY = 60;
+  const bw = bodyW * SCALE;
+  const bh = bodyH * SCALE;
+  const waistY = topY + bh * bodiceRatio;
+
+  let svg = svgOpen(totalW, totalH, block.name, block.flags);
+
+  // Features
+  const hasPrincessSeams = edges.length > 0;
+  const isLined = hasLining || Object.keys(panels).some(n => n.includes('lining'));
+  const hasZipper = block.build.some(s => {
+    const op = s.operation;
+    return op?.type === 'call' && op.name === 'C' && op.args?.some(a =>
+      (a.type === 'reference' && a.value === 'invisible') || (a.type === 'call' && a.name === 'zip'));
+  });
+
+  // --- Sleeves ---
+  if (sleeve) {
+    const sy = topY + shoulderSlope * SCALE;
+    const sw = sleeveW * SCALE;
+    const sh = sleeveH * SCALE;
+    const cuffTaper = 0.75;
+
+    // Left sleeve
+    const lsx = cx - bw / 2;
+    svg += `<path d="M ${lsx},${sy} L ${lsx - sw},${sy + sh * 0.15} L ${lsx - sw * cuffTaper},${sy + sh} L ${lsx},${sy + sh * 0.85} Z"
+      fill="${FILL_SLEEVE}" stroke="${STROKE}" stroke-width="1.5" stroke-linejoin="round"/>`;
+
+    // Right sleeve
+    const rsx = cx + bw / 2;
+    svg += `<path d="M ${rsx},${sy} L ${rsx + sw},${sy + sh * 0.15} L ${rsx + sw * cuffTaper},${sy + sh} L ${rsx},${sy + sh * 0.85} Z"
+      fill="${FILL_SLEEVE}" stroke="${STROKE}" stroke-width="1.5" stroke-linejoin="round"/>`;
+  }
+
+  // --- Dress body (fitted bodice + flared skirt) ---
+  const hemHalf = (bw / 2) + hemFlare * SCALE;
+  svg += `<path d="
+    M ${cx - neckW * SCALE / 2},${topY}
+    Q ${cx - neckW * SCALE / 2 - 4},${topY - neckH * SCALE * 0.5} ${cx},${topY - neckH * SCALE * 0.7}
+    Q ${cx + neckW * SCALE / 2 + 4},${topY - neckH * SCALE * 0.5} ${cx + neckW * SCALE / 2},${topY}
+    L ${cx + bw / 2},${topY + shoulderSlope * SCALE}
+    Q ${cx + bw / 2 - waistIndent * SCALE * 0.3},${waistY - bh * 0.05} ${cx + bw / 2 - waistIndent * SCALE * 0.5},${waistY}
+    L ${cx + hemHalf},${topY + bh}
+    L ${cx - hemHalf},${topY + bh}
+    L ${cx - bw / 2 + waistIndent * SCALE * 0.5},${waistY}
+    Q ${cx - bw / 2 + waistIndent * SCALE * 0.3},${waistY - bh * 0.05} ${cx - bw / 2},${topY + shoulderSlope * SCALE}
+    Z
+  " fill="${FILL_FRONT}" stroke="${STROKE}" stroke-width="1.5" stroke-linejoin="round"/>`;
+
+  // Waistline
+  svg += `<line x1="${cx - bw / 2 + waistIndent * SCALE * 0.5}" y1="${waistY}" x2="${cx + bw / 2 - waistIndent * SCALE * 0.5}" y2="${waistY}"
+    stroke="${STITCH_COLOR}" stroke-width="1" stroke-dasharray="6,3"/>`;
+
+  // Neck stitch
+  svg += neckStitch(cx, topY, neckW * SCALE, neckH * SCALE);
+
+  // Center line
+  svg += `<line x1="${cx}" y1="${topY - neckH * SCALE * 0.5}" x2="${cx}" y2="${topY + bh}"
+    stroke="${STITCH_COLOR}" stroke-width="0.7" stroke-dasharray="6,4"/>`;
+
+  // Princess seam lines
+  if (hasPrincessSeams) {
+    const seamX1 = cx - bw * 0.22;
+    const seamX2 = cx + bw * 0.22;
+    const seamY1 = topY + shoulderSlope * SCALE;
+    const seamY2 = topY + bh;
+    const curve = bw * 0.06;
+    const bustY = topY + bh * 0.22;
+
+    svg += `<path d="M ${seamX1},${seamY1} Q ${seamX1 - curve},${bustY} ${seamX1},${seamY2}" fill="none" stroke="${PRINCESS_COLOR}" stroke-width="1.2" stroke-dasharray="5,3"/>`;
+    svg += `<path d="M ${seamX2},${seamY1} Q ${seamX2 + curve},${bustY} ${seamX2},${seamY2}" fill="none" stroke="${PRINCESS_COLOR}" stroke-width="1.2" stroke-dasharray="5,3"/>`;
+  }
+
+  // Hem stitch
+  const hemY = topY + bh - 8;
+  svg += `<line x1="${cx - hemHalf + 4}" y1="${hemY}" x2="${cx + hemHalf - 4}" y2="${hemY}"
+    stroke="${STITCH_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>`;
+
+  // Zipper indicator (center back)
+  if (hasZipper) {
+    const zipTop = topY + 4;
+    const zipBot = waistY + bh * 0.05;
+    svg += `<line x1="${cx + 2}" y1="${zipTop}" x2="${cx + 2}" y2="${zipBot}"
+      stroke="#6366f1" stroke-width="1.5"/>`;
+    svg += `<rect x="${cx}" y="${zipTop}" width="4" height="6" rx="1" fill="#6366f1"/>`;
+    svg += `<text x="${cx + 10}" y="${zipTop + 10}" fill="#6366f1" font-size="7" font-family="system-ui">zip</text>`;
+  }
+
+  // Lining indicator
+  if (isLined) {
+    const inset = 6;
+    svg += `<path d="
+      M ${cx - hemHalf + inset + 10},${topY + bh * 0.85}
+      L ${cx + hemHalf - inset - 10},${topY + bh * 0.85}
+      L ${cx + hemHalf - inset},${topY + bh - inset}
+      L ${cx - hemHalf + inset},${topY + bh - inset}
+      Z
+    " fill="none" stroke="#8b7fa8" stroke-width="0.6" stroke-dasharray="2,2" opacity="0.5"/>`;
+    svg += `<text x="${cx}" y="${topY + bh - inset - 4}" text-anchor="middle" fill="#8b7fa8" font-size="7" font-family="system-ui" opacity="0.7">LINING</text>`;
+  }
+
+  // Labels
+  const labelParts = [];
+  if (isLined) labelParts.push('lined');
+  if (hasPrincessSeams) labelParts.push('princess seams');
+  if (hasZipper) labelParts.push('back zip');
+  const detailLabel = labelParts.length ? labelParts.join(' \u00B7 ') : '';
+
+  svg += `<text x="${cx}" y="${waistY - 16}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="13" font-weight="500" font-family="system-ui">front</text>`;
+  if (detailLabel) {
+    svg += `<text x="${cx}" y="${waistY - 4}" text-anchor="middle" fill="${DIM_COLOR}" font-size="9" font-family="system-ui">${detailLabel}</text>`;
+  }
+
+  // Dimensions
+  const dimY = topY + bh + 28;
+  svg += dimensionLine(cx - bw / 2, dimY, cx + bw / 2, dimY, fmtCm(bodyW) + ' bust');
+  svg += dimensionLine(cx - hemHalf, dimY + 20, cx + hemHalf, dimY + 20, fmtCm(bodyW + hemFlare * 2) + ' hem');
+  svg += dimensionLineV(cx + hemHalf + 16, topY, cx + hemHalf + 16, topY + bh, fmtCm(bodyH));
 
   svg += '</svg>';
   return svg;
