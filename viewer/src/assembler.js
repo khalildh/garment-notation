@@ -108,11 +108,11 @@ function detectGarmentType(panels, block) {
   const hasTorso = names.some(n => n === 'front' || n === 'back') || regions.some(r => r.includes('torso'));
   const hasLeg = regions.some(r => r.includes('leg') && !r.includes('arm'));
 
-  // A dress combines torso + leg without sleeves or waistband
-  // (blazers/shirts also have torso+leg but have sleeves; skirts have waistbands)
+  // A dress has explicit skirt panels, or combines torso+leg without sleeves/waistband
   const combinesTorsoAndLeg = regions.some(r => r.includes('torso') && r.includes('leg'));
   const hasWaistband = names.some(n => n.includes('waistband') || n.includes('band'));
-  const isDress = combinesTorsoAndLeg && !hasSleeve && !hasWaistband;
+  const hasSkirtPanels = names.some(n => n.includes('skirt'));
+  const isDress = hasSkirtPanels || (combinesTorsoAndLeg && !hasSleeve && !hasWaistband);
 
   if (hasCollar && !hasSleeve && !hasTorso && !isDress) return 'collar';
   if (isDress) return 'dress';
@@ -375,25 +375,48 @@ function drawTop(block, panels, edges = [], hasLining = false) {
 // --- Dress ---
 
 function drawDress(block, panels, edges = [], hasLining = false) {
-  // Collect all front-facing panels to compute full width
-  const frontPanels = Object.values(panels).filter(p => p.region.includes('torso.front'));
-  const backPanels = Object.values(panels).filter(p => p.region.includes('torso.back'));
+  const panelNames = Object.keys(panels);
   const sleeve = Object.values(panels).find(p => p.region.includes('arm'));
 
-  // Sum widths of all front panels (handles princess seams)
-  let bodyW = 0;
-  let bodyH = 0;
-  for (const p of (frontPanels.length ? frontPanels : backPanels)) {
-    bodyW += p.dims.widthTop * p.ease;
-    bodyH = Math.max(bodyH, p.dims.height);
-  }
-  if (bodyW === 0) { bodyW = 46; bodyH = 60; }
+  // Detect if this is a bodice+skirt dress (separate panels) or princess seam (combined panels)
+  const hasSkirtPanels = panelNames.some(n => n.includes('skirt'));
+  const bodicePanels = hasSkirtPanels
+    ? Object.entries(panels).filter(([n, p]) => !n.includes('skirt') && !p.region.includes('arm') && p.region.includes('torso'))
+    : [];
+  const skirtPanels = hasSkirtPanels
+    ? Object.entries(panels).filter(([n]) => n.includes('skirt'))
+    : [];
 
-  // Split into bodice and skirt portions based on torso vs leg contribution
-  const firstFront = frontPanels[0] || backPanels[0];
-  const regionStr = firstFront?.region || '';
-  // Estimate bodice ratio from region: torso portion / total height
-  const bodiceRatio = regionStr.includes('leg') ? 0.55 : 1.0;
+  let bodiceW, skirtW, bodiceH, skirtH, bodyW, bodyH;
+
+  if (hasSkirtPanels && bodicePanels.length > 0) {
+    // Bodice + skirt pattern: separate panels stacked vertically
+    const bFront = bodicePanels.find(([n, p]) => p.region.includes('front'));
+    const sFront = skirtPanels.find(([n, p]) => p.region.includes('front'));
+    bodiceW = (bFront?.[1].dims.widthTop ?? 46) * (bFront?.[1].ease ?? 1.0);
+    bodiceH = bFront?.[1].dims.height ?? 20;
+    skirtW = (sFront?.[1].dims.widthBottom ?? 50) * (sFront?.[1].ease ?? 1.0);
+    skirtH = sFront?.[1].dims.height ?? 40;
+    bodyW = Math.max(bodiceW, skirtW);
+    bodyH = bodiceH + skirtH;
+  } else {
+    // Princess seam pattern: multiple front panels side by side
+    const frontPanels = Object.values(panels).filter(p => p.region.includes('torso.front'));
+    const backPanels = Object.values(panels).filter(p => p.region.includes('torso.back'));
+    bodyW = 0;
+    bodyH = 0;
+    for (const p of (frontPanels.length ? frontPanels : backPanels)) {
+      bodyW += p.dims.widthTop * p.ease;
+      bodyH = Math.max(bodyH, p.dims.height);
+    }
+    if (bodyW === 0) { bodyW = 46; bodyH = 60; }
+    bodiceW = bodyW;
+    skirtW = bodyW;
+    bodiceH = bodyH * 0.55;
+    skirtH = bodyH * 0.45;
+  }
+
+  const bodiceRatio = bodiceH / bodyH;
 
   const sleeveW = sleeve ? sleeve.dims.height * (sleeve.ease ?? 1.0) * 0.65 : 0;
   const sleeveH = sleeve ? sleeve.dims.widthTop * (sleeve.ease ?? 1.0) * 0.55 : 0;
@@ -401,8 +424,8 @@ function drawDress(block, panels, edges = [], hasLining = false) {
   const neckW = bodyW * 0.32;
   const neckH = 6;
   const shoulderSlope = bodyH * 0.04;
-  const waistIndent = bodyW * 0.06;
-  const hemFlare = bodyW * 0.08;
+  const waistIndent = bodiceW * 0.06;
+  const hemFlare = Math.max((skirtW - bodiceW) / 2, bodyW * 0.06);
 
   const totalW = (bodyW + hemFlare * 2 + sleeveW * 2) * SCALE + 120;
   const totalH = bodyH * SCALE + 140;
