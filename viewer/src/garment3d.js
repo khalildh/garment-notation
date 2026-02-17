@@ -92,67 +92,67 @@ function classifyPanel(name, region) {
 
 /**
  * Position cloth particles around the mannequin body.
+ * Uses elliptical wrapping to match the body's side-to-side vs front-to-back shape.
  */
 function positionCloth(cloth, role, body, widthCm, heightCm) {
   const { cols, rows, positions } = cloth;
-  const { torsoLen, bustR, shoulderHW, upperArmR, armLen } = body;
+  const { torsoLen, shoulderHW, upperArmR, armLen, shoulderAttachY } = body;
+  const depthRatio = body.depthRatio || 0.75;
+  const easeOffset = 1.5;
 
   if (role === 'front') {
-    // Wrap around front half of torso
-    const angleSpan = Math.PI; // -pi/2 to pi/2
-    const easeOffset = 1.5;
+    const angleSpan = Math.PI;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = (r * cols + c) * 3;
         const u = cols > 1 ? c / (cols - 1) : 0.5;
         const v = rows > 1 ? r / (rows - 1) : 0;
         const angle = -angleSpan / 2 + u * angleSpan;
-        const bodyR = getBodyRadiusAtHeight(1 - v, body) + easeOffset;
+        const rx = getBodyRadiusAtHeight(1 - v, body) + easeOffset;
+        const rz = rx * depthRatio + easeOffset;
         const y = torsoLen * (1 - v);
 
-        positions[idx] = Math.sin(angle) * bodyR;
+        positions[idx] = Math.sin(angle) * rx;
         positions[idx + 1] = y;
-        positions[idx + 2] = Math.cos(angle) * bodyR;
+        positions[idx + 2] = Math.cos(angle) * rz;
       }
     }
   } else if (role === 'back') {
-    // Wrap around back half of torso
     const angleSpan = Math.PI;
-    const easeOffset = 1.5;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = (r * cols + c) * 3;
         const u = cols > 1 ? c / (cols - 1) : 0.5;
         const v = rows > 1 ? r / (rows - 1) : 0;
         const angle = angleSpan / 2 + u * angleSpan;
-        const bodyR = getBodyRadiusAtHeight(1 - v, body) + easeOffset;
+        const rx = getBodyRadiusAtHeight(1 - v, body) + easeOffset;
+        const rz = rx * depthRatio + easeOffset;
         const y = torsoLen * (1 - v);
 
-        positions[idx] = Math.sin(angle) * bodyR;
+        positions[idx] = Math.sin(angle) * rx;
         positions[idx + 1] = y;
-        positions[idx + 2] = Math.cos(angle) * bodyR;
+        positions[idx + 2] = Math.cos(angle) * rz;
       }
     }
   } else if (role === 'sleeve') {
-    // Cylinder around arm axis (left arm by default, duplicated for right)
-    const sleeveR = upperArmR + 1;
-    const shoulderY = torsoLen;
+    const attachY = shoulderAttachY || torsoLen;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = (r * cols + c) * 3;
         const u = cols > 1 ? c / (cols - 1) : 0.5;
         const v = rows > 1 ? r / (rows - 1) : 0;
         const angle = u * Math.PI * 2;
-        const armY = shoulderY - 2 - v * armLen;
+        const armY = attachY - 1 - v * armLen;
         const currentR = lerp(upperArmR + 1, upperArmR * 0.7 + 1, v);
 
-        positions[idx] = -(shoulderHW + 1) + Math.cos(angle) * currentR;
+        positions[idx] = -shoulderHW + Math.cos(angle) * currentR;
         positions[idx + 1] = armY;
         positions[idx + 2] = Math.sin(angle) * currentR;
       }
     }
   } else {
-    // Generic: flat plane in front
+    const rx = getBodyRadiusAtHeight(0.3, body);
+    const rz = rx * depthRatio;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const idx = (r * cols + c) * 3;
@@ -161,7 +161,7 @@ function positionCloth(cloth, role, body, widthCm, heightCm) {
 
         positions[idx] = (u - 0.5) * widthCm;
         positions[idx + 1] = torsoLen * (1 - v);
-        positions[idx + 2] = bustR + 3;
+        positions[idx + 2] = rz + 3;
       }
     }
   }
@@ -170,19 +170,27 @@ function positionCloth(cloth, role, body, widthCm, heightCm) {
   cloth.prevPositions.set(positions);
 }
 
+function smoothstep(t) {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * (3 - 2 * t);
+}
+
 /**
- * Get body radius at a proportional height (0=bottom, 1=top).
+ * Get body radius at a proportional height (0=neck/top, 1=bottom).
+ * Matches the smoothstep profile in body3d.js.
  */
 function getBodyRadiusAtHeight(prop, body) {
-  const { neckR, bustR, waistR, hipR, bustY, waistY, hipY } = body;
+  const { neckR, bustR, waistR, hipR, shoulderHW, bustY, waistY, hipY } = body;
+  const shoulderProp = 0.07;
 
-  // prop is from top (0=neck, 1=bottom)
-  if (prop <= bustY) {
-    return lerp(neckR, bustR, prop / bustY);
+  if (prop <= shoulderProp) {
+    return lerp(neckR, shoulderHW || bustR, smoothstep(prop / shoulderProp));
+  } else if (prop <= bustY) {
+    return lerp(shoulderHW || bustR, bustR, smoothstep((prop - shoulderProp) / (bustY - shoulderProp)));
   } else if (prop <= waistY) {
-    return lerp(bustR, waistR, (prop - bustY) / (waistY - bustY));
+    return lerp(bustR, waistR, smoothstep((prop - bustY) / (waistY - bustY)));
   } else if (prop <= hipY) {
-    return lerp(waistR, hipR, (prop - waistY) / (hipY - waistY));
+    return lerp(waistR, hipR, smoothstep((prop - waistY) / (hipY - waistY)));
   }
   return hipR;
 }

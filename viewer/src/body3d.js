@@ -1,8 +1,7 @@
 // @ts-check
 /**
  * Parametric mannequin mesh from BODY measurements.
- * Uses parametric surfaces with cosine-based contouring, joint spheres,
- * and rounded limb caps for organic shapes.
+ * Uses parametric surfaces with cosine-based contouring and joint spheres.
  */
 
 import { BODY } from './body.js';
@@ -33,11 +32,9 @@ const THIGH_R = BODY.thigh_circ / (2 * Math.PI);
 const KNEE_R = BODY.knee_circ / (2 * Math.PI);
 const SHOULDER_PROP = 0.07;
 const ARM_ANGLE_RAD = 15 * Math.PI / 180;
+const SHOULDER_ATTACH_Y = torsoLen * (1 - SHOULDER_PROP);
 
-// Warm skin-tone colors (inspired by mannequin.js)
-const COLOR_BODY = 0xffe4c4;   // bisque
-const COLOR_LIMBS = 0xfaebd7;  // antiquewhite
-const COLOR_JOINTS = 0xdeb887; // burlywood
+const MANNEQUIN_COLOR = 0xe8c4a0;
 
 // ---- Helpers ----
 
@@ -51,7 +48,6 @@ function smoothstep(t) {
 
 /**
  * Cosine-based bumps for organic surface contouring.
- * Creates localized lumps on parametric surfaces.
  * Each param: [uMin, uMax, vMin, vMax, 1/height]
  */
 function cossers(u, v, params) {
@@ -87,113 +83,61 @@ function profileRadius(prop) {
   }
 }
 
-// ---- Geometry builders ----
-
-/**
- * Build a wrapped parametric surface (v wraps around 0..1).
- * @param {typeof import('three')} THREE
- * @param {(u: number, v: number) => {x: number, y: number, z: number}} func
- * @param {number} numU - divisions along u
- * @param {number} numV - divisions around v (wrapping)
- */
-function buildSurface(THREE, func, numU, numV) {
-  const positions = [];
-  const indices = [];
-
-  for (let i = 0; i <= numU; i++) {
-    for (let j = 0; j < numV; j++) {
-      const p = func(i / numU, j / numV);
-      positions.push(p.x, p.y, p.z);
-    }
-  }
-
-  for (let i = 0; i < numU; i++) {
-    for (let j = 0; j < numV; j++) {
-      const jn = (j + 1) % numV;
-      const a = i * numV + j;
-      const b = i * numV + jn;
-      const c = (i + 1) * numV + j;
-      const d = (i + 1) * numV + jn;
-      indices.push(a, c, b);
-      indices.push(b, c, d);
-    }
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  return geo;
-}
+// ---- Torso geometry ----
 
 /**
  * Torso parametric surface with cossers bust contouring.
  * u: 0=bottom (hips), 1=top (neck). v: 0..1 around circumference.
- * v=0 → +x (right), v=0.25 → +z (front), v=0.5 → -x (left), v=0.75 → -z (back)
  */
-function torsoFunc(u, v) {
+function torsoVertex(u, v) {
   const prop = 1 - u;
   const baseRx = profileRadius(prop);
   const baseRz = baseRx * DEPTH_RATIO;
 
-  // Bust protrusion — two separate bumps (right and left breast)
   const mod = cossers(u, v, [
-    [0.65, 0.80, 0.05, 0.20, 4],  // right breast
-    [0.65, 0.80, 0.30, 0.45, 4],  // left breast
+    [0.65, 0.80, 0.05, 0.20, 4],
+    [0.65, 0.80, 0.30, 0.45, 4],
   ]);
 
   const rx = baseRx * mod;
   const rz = baseRz * mod;
   const theta = v * Math.PI * 2;
 
-  return {
-    x: rx * Math.cos(theta),
-    y: u * torsoLen,
-    z: rz * Math.sin(theta),
-  };
+  return [rx * Math.cos(theta), u * torsoLen, rz * Math.sin(theta)];
 }
 
-/** Build torso mesh with top/bottom caps. */
 function buildTorsoMesh(THREE) {
-  const numU = 20;
-  const numV = 24;
+  const numU = 20, numV = 24;
   const positions = [];
   const indices = [];
 
-  // Main surface
   for (let i = 0; i <= numU; i++) {
     for (let j = 0; j < numV; j++) {
-      const p = torsoFunc(i / numU, j / numV);
-      positions.push(p.x, p.y, p.z);
+      const [x, y, z] = torsoVertex(i / numU, j / numV);
+      positions.push(x, y, z);
     }
   }
 
   for (let i = 0; i < numU; i++) {
     for (let j = 0; j < numV; j++) {
       const jn = (j + 1) % numV;
-      const a = i * numV + j;
-      const b = i * numV + jn;
-      const c = (i + 1) * numV + j;
-      const d = (i + 1) * numV + jn;
-      indices.push(a, c, b);
-      indices.push(b, c, d);
+      const a = i * numV + j, b = i * numV + jn;
+      const c = (i + 1) * numV + j, d = (i + 1) * numV + jn;
+      indices.push(a, c, b, b, c, d);
     }
   }
 
   // Top cap
   const topIdx = positions.length / 3;
   positions.push(0, torsoLen, 0);
-  const topRing = numU * numV;
-  for (let j = 0; j < numV; j++) {
-    indices.push(topIdx, topRing + (j + 1) % numV, topRing + j);
-  }
+  for (let j = 0; j < numV; j++)
+    indices.push(topIdx, numU * numV + (j + 1) % numV, numU * numV + j);
 
   // Bottom cap
   const botIdx = positions.length / 3;
   positions.push(0, 0, 0);
-  for (let j = 0; j < numV; j++) {
+  for (let j = 0; j < numV; j++)
     indices.push(botIdx, j, (j + 1) % numV);
-  }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -202,43 +146,7 @@ function buildTorsoMesh(THREE) {
   return geo;
 }
 
-/**
- * Create a parametric limb function with rounded end caps.
- * Limb extends from (0,0,0) downward to (0,-length,0).
- * Both ends converge to a point; joint spheres cover the attachment end.
- */
-function makeLimbFunc(length, rTop, rBot) {
-  return function (u, v) {
-    const su = smoothstep(u);
-    const r = lerp(rTop, rBot, su);
-    const theta = v * Math.PI * 2;
-    const cosT = Math.cos(theta);
-    const sinT = Math.sin(theta);
-
-    // Cylindrical shape
-    const x1 = r * cosT;
-    const y1 = -su * length;
-    const z1 = r * 0.9 * sinT;
-
-    // Spherical cap (converges to point at both ends)
-    const capCos = Math.cos(Math.PI * su - Math.PI / 2);
-    const capSin = Math.sin(Math.PI * su - Math.PI / 2);
-    const x2 = r * cosT * capCos;
-    const y2 = -length * (0.5 + capSin / 2);
-    const z2 = r * 0.9 * sinT * capCos;
-
-    // Blend: cylindrical in middle, spherical at ends
-    const k = Math.pow(Math.abs(2 * su - 1), 16);
-
-    return {
-      x: lerp(x1, x2, k),
-      y: lerp(y1, y2, k),
-      z: lerp(z1, z2, k),
-    };
-  };
-}
-
-// ---- Main export ----
+// ---- Main ----
 
 /**
  * @param {typeof import('three')} THREE
@@ -247,101 +155,93 @@ function makeLimbFunc(length, rTop, rBot) {
 export function createMannequin(THREE) {
   const group = new THREE.Group();
 
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: COLOR_BODY, transparent: true, opacity: 0.45,
-    side: THREE.DoubleSide, roughness: 1, metalness: 0,
-  });
-  const limbMat = new THREE.MeshStandardMaterial({
-    color: COLOR_LIMBS, transparent: true, opacity: 0.45,
-    side: THREE.DoubleSide, roughness: 1, metalness: 0,
-  });
-  const jointMat = new THREE.MeshStandardMaterial({
-    color: COLOR_JOINTS, transparent: true, opacity: 0.5,
-    roughness: 1, metalness: 0,
+  // Single material — avoids transparency stacking artifacts
+  const mat = new THREE.MeshPhongMaterial({
+    color: MANNEQUIN_COLOR,
+    transparent: true,
+    opacity: 0.55,
+    side: THREE.DoubleSide,
+    depthWrite: false,
   });
 
-  // --- Torso (parametric surface with bust contouring) ---
-  group.add(new THREE.Mesh(buildTorsoMesh(THREE), bodyMat));
+  // Joint sphere material — slightly more opaque for visibility
+  const jointMat = new THREE.MeshPhongMaterial({
+    color: 0xdeb887,
+    transparent: true,
+    opacity: 0.6,
+    depthWrite: false,
+  });
 
-  // --- Neck joint sphere ---
-  const neckJoint = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(neckR * 1.1, 2), jointMat);
+  // --- Torso (parametric with cossers bust) ---
+  group.add(new THREE.Mesh(buildTorsoMesh(THREE), mat));
+
+  // --- Neck ---
+  const neckJoint = new THREE.Mesh(new THREE.IcosahedronGeometry(neckR * 1.05, 2), jointMat);
   neckJoint.position.y = torsoLen;
   group.add(neckJoint);
 
-  // --- Neck ---
   const neckGeo = new THREE.CylinderGeometry(neckR * 0.9, neckR, NECK_HEIGHT, 12, 1);
-  const neck = new THREE.Mesh(neckGeo, limbMat);
+  const neck = new THREE.Mesh(neckGeo, mat);
   neck.position.y = torsoLen + NECK_HEIGHT / 2;
   group.add(neck);
 
-  // --- Head joint sphere ---
-  const headJoint = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(neckR, 2), jointMat);
+  // --- Head ---
+  const headJoint = new THREE.Mesh(new THREE.IcosahedronGeometry(neckR * 0.95, 2), jointMat);
   headJoint.position.y = torsoLen + NECK_HEIGHT;
   group.add(headJoint);
 
-  // --- Head (ellipsoid) ---
   const headGeo = new THREE.SphereGeometry(HEAD_RX, 16, 12);
-  const head = new THREE.Mesh(headGeo, limbMat);
+  const head = new THREE.Mesh(headGeo, mat);
   head.scale.set(1, HEAD_RY / HEAD_RX, HEAD_RZ / HEAD_RX);
   head.position.y = torsoLen + NECK_HEIGHT + HEAD_RY * 0.85;
   group.add(head);
 
-  // --- Arms (parametric limbs with rounded caps) ---
-  const armGeo = buildSurface(THREE, makeLimbFunc(armLen, upperArmR, wristR), 12, 16);
-  const shoulderAttachY = torsoLen * (1 - SHOULDER_PROP);
+  // --- Arms (clean CylinderGeometry) ---
+  const armGeo = new THREE.CylinderGeometry(wristR, upperArmR, armLen, 12, 4);
   for (const side of [-1, 1]) {
-    // Shoulder joint
-    const sj = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(upperArmR * 1.3, 2), jointMat);
-    sj.position.set(side * shoulderHW, shoulderAttachY, 0);
+    const sj = new THREE.Mesh(new THREE.IcosahedronGeometry(upperArmR * 1.2, 2), jointMat);
+    sj.position.set(side * shoulderHW, SHOULDER_ATTACH_Y, 0);
     group.add(sj);
 
-    // Arm
-    const arm = new THREE.Mesh(armGeo, limbMat);
-    arm.position.set(side * shoulderHW, shoulderAttachY, 0);
+    const arm = new THREE.Mesh(armGeo, mat);
+    arm.position.set(side * shoulderHW, SHOULDER_ATTACH_Y - armLen / 2 - 1, 0);
     arm.rotation.z = side * ARM_ANGLE_RAD;
     group.add(arm);
   }
 
-  // --- Legs (parametric limbs with rounded caps) ---
-  const legGeo = buildSurface(THREE, makeLimbFunc(LEG_LENGTH, THIGH_R, KNEE_R), 12, 16);
+  // --- Legs (clean CylinderGeometry) ---
+  const legGeo = new THREE.CylinderGeometry(KNEE_R, THIGH_R, LEG_LENGTH, 12, 4);
   for (const side of [-1, 1]) {
-    // Hip joint
-    const hj = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(THIGH_R * 1.1, 2), jointMat);
+    const hj = new THREE.Mesh(new THREE.IcosahedronGeometry(THIGH_R * 1.05, 2), jointMat);
     hj.position.set(side * hipR * 0.35, 0, 0);
     group.add(hj);
 
-    // Leg
-    const leg = new THREE.Mesh(legGeo, limbMat);
-    leg.position.set(side * hipR * 0.35, 0, 0);
+    const leg = new THREE.Mesh(legGeo, mat);
+    leg.position.set(side * hipR * 0.35, -LEG_LENGTH / 2, 0);
     leg.rotation.z = side * (2 * Math.PI / 180);
     group.add(leg);
   }
 
-  // --- Collision spheres ---
   const collisionSpheres = buildCollisionSpheres();
 
-  // --- Attachment points ---
   const attachments = {
-    'shoulder.L': { x: -shoulderHW, y: shoulderAttachY, z: 0 },
-    'shoulder.R': { x: shoulderHW, y: shoulderAttachY, z: 0 },
+    'shoulder.L': { x: -shoulderHW, y: SHOULDER_ATTACH_Y, z: 0 },
+    'shoulder.R': { x: shoulderHW, y: SHOULDER_ATTACH_Y, z: 0 },
     'neckline': { x: 0, y: torsoLen, z: 0 },
     'waist': { x: 0, y: torsoLen * (1 - WAIST_Y), z: 0 },
-    'armhole.L': { x: -shoulderHW, y: shoulderAttachY - 2, z: 0 },
-    'armhole.R': { x: shoulderHW, y: shoulderAttachY - 2, z: 0 },
+    'armhole.L': { x: -shoulderHW, y: SHOULDER_ATTACH_Y - 2, z: 0 },
+    'armhole.R': { x: shoulderHW, y: SHOULDER_ATTACH_Y - 2, z: 0 },
   };
 
   return { group, collisionSpheres, attachments };
 }
 
-// ---- Collision ----
+// ---- Collision spheres ----
+// Elliptical coverage: center sphere + 4 cardinal perimeter spheres per height slice
 
 function buildCollisionSpheres() {
   const spheres = [];
-  const steps = 10;
+  const steps = 12;
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -349,31 +249,31 @@ function buildCollisionSpheres() {
     const prop = 1 - t;
     const rx = profileRadius(prop);
     const rz = rx * DEPTH_RATIO;
-    const safeR = Math.min(rx, rz) * 0.85;
 
-    spheres.push({ x: 0, y, z: 0, r: safeR });
+    // Center sphere — covers inner volume
+    spheres.push({ x: 0, y, z: 0, r: rz * 0.75 });
 
-    if (Math.abs(prop - BUST_Y) < 0.1) {
-      spheres.push({ x: 0, y, z: rz * 0.5, r: safeR * 0.6 });
-      spheres.push({ x: 0, y, z: -rz * 0.5, r: safeR * 0.6 });
-    }
-    if (Math.abs(prop - HIP_Y) < 0.1) {
-      spheres.push({ x: rx * 0.4, y, z: 0, r: safeR * 0.5 });
-      spheres.push({ x: -rx * 0.4, y, z: 0, r: safeR * 0.5 });
-    }
+    // 4 cardinal perimeter spheres — cover the elliptical outline
+    // Right / Left
+    spheres.push({ x: rx * 0.55, y, z: 0, r: rx * 0.45 });
+    spheres.push({ x: -rx * 0.55, y, z: 0, r: rx * 0.45 });
+    // Front / Back
+    spheres.push({ x: 0, y, z: rz * 0.5, r: rz * 0.5 });
+    spheres.push({ x: 0, y, z: -rz * 0.5, r: rz * 0.5 });
   }
 
-  const shoulderY = torsoLen;
+  // Arms
   for (const side of [-1, 1]) {
     for (let i = 0; i < 4; i++) {
       const t = i / 3;
-      const armY = shoulderY - 2 - t * armLen;
+      const armY = SHOULDER_ATTACH_Y - 1 - t * armLen;
       const armX = side * shoulderHW + Math.sin(side * ARM_ANGLE_RAD) * t * armLen;
-      const r = lerp(upperArmR, wristR, t) * 0.8;
+      const r = lerp(upperArmR, wristR, t) * 0.85;
       spheres.push({ x: armX, y: armY, z: 0, r });
     }
   }
 
+  // Legs
   for (const side of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
       const t = i / 2;
@@ -385,12 +285,14 @@ function buildCollisionSpheres() {
   return spheres;
 }
 
-// ---- Public dimensions ----
+// ---- Exports ----
 
 export function getBodyDims() {
   return {
     torsoLen, shoulderHW, neckR, bustR, waistR, hipR,
     upperArmR, wristR, armLen,
     bustY: BUST_Y, waistY: WAIST_Y, hipY: HIP_Y,
+    depthRatio: DEPTH_RATIO,
+    shoulderAttachY: SHOULDER_ATTACH_Y,
   };
 }
