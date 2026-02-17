@@ -19,12 +19,13 @@ const DIM_COLOR = '#64748b';
 
 export function render(ast) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
-  const block = ast.blocks[0];
-  const panels = extractPanels(block);
+  const block = resolveMain(ast);
+  const resolved = resolveComponents(block, ast);
+  const panels = extractPanels(resolved);
   if (panels.length === 0) return emptySvg('No panels found');
 
-  const darts = extractDarts(block);
-  const openings = extractOpenings(block);
+  const darts = extractDarts(resolved);
+  const openings = extractOpenings(resolved);
 
   // Apply darts to panels
   for (const d of darts) {
@@ -371,6 +372,56 @@ function dartMark(w, h, dart) {
     <line x1="${cx}" y1="${cy}" x2="${cx - dx}" y2="${cy + dy}" stroke="${STROKE}" stroke-width="1" stroke-dasharray="3,2"/>
     <line x1="${cx}" y1="${cy}" x2="${cx + dx}" y2="${cy + dy}" stroke="${STROKE}" stroke-width="1" stroke-dasharray="3,2"/>
   `;
+}
+
+// --- Component resolution ---
+
+function resolveMain(ast) {
+  // Prefer the GARMENT block; fall back to first block
+  return ast.blocks.find(b => b.type === 'garment') || ast.blocks[ast.blocks.length - 1];
+}
+
+function resolveComponents(block, ast) {
+  // Find USE() declarations and expand them by pulling in panels from the referenced component
+  const components = {};
+  for (const b of ast.blocks) {
+    if (b.type === 'component') components[b.name] = b;
+  }
+
+  const expanded = [];
+  for (const decl of block.declarations) {
+    if (decl.value.type === 'call' && decl.value.name === 'USE') {
+      const compName = resolveRef(decl.value.args[0]);
+      const comp = components[compName];
+      if (comp) {
+        // Prefix component panels with the instance name
+        for (const cdecl of comp.declarations) {
+          if (cdecl.value.type === 'call' && cdecl.value.name === 'P') {
+            expanded.push({
+              ...cdecl,
+              name: decl.name + '.' + cdecl.name,
+              _component: compName,
+              _instance: decl.name,
+            });
+          }
+        }
+      }
+    } else {
+      expanded.push(decl);
+    }
+  }
+
+  // Merge component build steps
+  const expandedBuild = [...block.build];
+  for (const decl of block.declarations) {
+    if (decl.value.type === 'call' && decl.value.name === 'USE') {
+      const compName = resolveRef(decl.value.args[0]);
+      const comp = components[compName];
+      if (comp) expandedBuild.push(...comp.build);
+    }
+  }
+
+  return { ...block, declarations: expanded, build: expandedBuild };
 }
 
 function fmtCm(v) { return v.toFixed(1) + 'cm'; }

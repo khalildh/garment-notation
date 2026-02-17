@@ -137,4 +137,154 @@ const EXAMPLES = {
     >> S(collar_stand.ends, lapel.notch, plain)
     >> F(lapel, break_point, out)
 }`,
+  blazer: `GARMENT blazer [SYM] {
+
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+  INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
+
+  -- Body panels
+  front        = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back         = P(%torso.back + %leg[0..0.1], contour, 1.08)
+  side         = P(%torso.R[0..1], contour, 1.05)
+
+  -- Two-piece sleeve
+  sleeve_top   = P(%arm[0..0.7], contour, 1.1)
+  sleeve_under = P(%arm[0..0.7], contour, 1.05)
+
+  -- Collar (notched lapel)
+  collar_stand = P(%neck, rect, 1.0)
+  collar_fall  = P(%neck, contour, 1.0)
+  lapel        = P(%torso.front[0..0.15], contour, 1.0)
+
+  -- Welt pocket
+  welt         = P(%torso.front[0.5..0.55], rect, 1.0)
+
+  -- Lining
+  lining_front  = P(%torso.front + %leg[0..0.08], contour, 1.12)
+  lining_back   = P(%torso.back + %leg[0..0.08], contour, 1.1)
+  lining_sleeve = P(%arm[0..0.65], contour, 1.12)
+
+  -- Openings
+  front_opening = O(%torso.front, slit, @neck)
+  neck_opening  = O(@neck, circle, body+2cm)
+
+  BUILD:
+    -- Fuse interlinings
+    FUSE(front, INTERLINING)
+    >> FUSE(collar_stand, INTERLINING)
+    >> FUSE(collar_fall, INTERLINING)
+    >> FUSE(lapel, INTERLINING)
+
+    -- Darts
+    >> D(front, @bust.L, 10, 8cm)
+    >> D(back, @shoulder.L, 6, 10cm)
+
+    -- Body assembly
+    >> S(front.shoulder, back.shoulder, plain)
+    >> S(front.side, side.front, plain)
+    >> S(back.side, side.back, plain)
+
+    -- Two-piece sleeve
+    >> S(sleeve_top.back, sleeve_under.back, plain)
+    >> S(sleeve_top.front, sleeve_under.front, plain)
+    >> S(sleeve_top.cap, {front.armhole, back.armhole}, plain)
+       [G(sleeve_top.cap, 1.12)]
+
+    -- Collar
+    >> S(collar_stand.top, collar_fall.bottom, plain)
+    >> S(collar_stand.ends, lapel.notch, plain)
+    >> S(collar_stand.bottom, neck_opening, plain)
+    >> F(collar_fall, gorge_line, out)
+    >> F(lapel, break_point, out)
+
+    -- Welt pocket
+    >> S(welt.top, front.pocket_mark, plain)
+    >> F(welt, 1cm, in)
+
+    -- Lining assembly
+    >> S(lining_front.shoulder, lining_back.shoulder, plain)
+    >> S(lining_front.side, lining_back.side, plain)
+    >> S(lining_sleeve.cap, {lining_front.armhole, lining_back.armhole}, plain)
+    >> S(lining_front.facing, front.facing, plain)
+
+    -- Finish
+    >> C(front_opening, button(2), center)
+    >> F(front.bottom, 3cm, in)
+}`,
+  composed_blazer: `-- Reusable components
+
+COMPONENT two_piece_sleeve {
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+
+  top   = P(%arm[0..0.7], contour, 1.1)
+  under = P(%arm[0..0.7], contour, 1.05)
+  cuff  = O(@wrist, circle, body+4cm)
+
+  BUILD:
+    S(top.back, under.back, plain)
+    >> S(top.front, under.front, plain)
+    >> F(cuff, 3cm, in)
+}
+
+COMPONENT notched_lapel {
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+  INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
+
+  collar_stand = P(%neck, rect, 1.0)
+  collar_fall  = P(%neck, contour, 1.0)
+  lapel        = P(%torso.front[0..0.15], contour, 1.0)
+
+  BUILD:
+    FUSE(collar_stand, INTERLINING)
+    >> FUSE(collar_fall, INTERLINING)
+    >> FUSE(lapel, INTERLINING)
+    >> S(collar_stand.top, collar_fall.bottom, plain)
+    >> F(collar_fall, gorge_line, out)
+    >> S(collar_stand.ends, lapel.notch, plain)
+    >> F(lapel, break_point, out)
+}
+
+COMPONENT welt_pocket {
+  welt = P(%torso.front[0.5..0.55], rect, 1.0)
+  bag  = P(%torso.front[0.5..0.7], rect, 1.0)
+
+  BUILD:
+    S(welt.top, bag.top, plain)
+    >> F(welt, 1cm, in)
+}
+
+-- Compose into a full garment
+
+GARMENT blazer [SYM] {
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+  INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
+
+  -- Body panels
+  front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back  = P(%torso.back + %leg[0..0.1], contour, 1.08)
+  side  = P(%torso.R[0..1], contour, 1.05)
+
+  -- Openings
+  front_opening = O(%torso.front, slit, @neck)
+  neck_opening  = O(@neck, circle, body+2cm)
+
+  -- Attach components
+  sleeve   = USE(two_piece_sleeve)
+  collar   = USE(notched_lapel)
+  pocket_L = USE(welt_pocket)
+
+  BUILD:
+    FUSE(front, INTERLINING)
+    >> D(front, @bust.L, 10, 8cm)
+    >> D(back, @shoulder.L, 6, 10cm)
+    >> S(front.shoulder, back.shoulder, plain)
+    >> S(front.side, side.front, plain)
+    >> S(back.side, side.back, plain)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.top.cap, 1.12)]
+    >> ATTACH(collar, neck_opening)
+    >> ATTACH(pocket_L, front.pocket_mark.L)
+    >> C(front_opening, button(2), center)
+    >> F(front.bottom, 3cm, in)
+}`,
 };

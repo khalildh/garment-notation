@@ -382,10 +382,83 @@ COMPONENT notched_lapel {
 | `>>`   | Then (build order)   | `step >> step`                   |
 | `SYM`  | Bilateral symmetry   | `GARMENT x [SYM] { ... }`       |
 | `[]`   | Region subdivision   | `%arm[0..0.5]`                   |
+| `USE`  | Instantiate component| `sleeve = USE(two_piece_sleeve)` |
+| `ATTACH`| Attach component    | `ATTACH(sleeve, armhole)`        |
 
 ---
 
-## 10. Extensions (Future)
+## 10. Composition
+
+Components are reusable building blocks that can be composed into garments using `USE` and `ATTACH`.
+
+### 10.1 Defining Components
+
+```
+COMPONENT two_piece_sleeve {
+  top   = P(%arm[0..0.7], contour, 1.1)
+  under = P(%arm[0..0.7], contour, 1.05)
+  cuff  = O(@wrist, circle, body+4cm)
+
+  BUILD:
+    S(top.back, under.back, plain)
+    >> S(top.front, under.front, plain)
+    >> F(cuff, 3cm, in)
+}
+```
+
+### 10.2 Using Components
+
+Inside a `GARMENT`, instantiate a component with `USE`. Each instance gets a name that namespaces the component's panels:
+
+```
+sleeve = USE(two_piece_sleeve)
+-- creates sleeve.top and sleeve.under
+```
+
+### 10.3 Attaching Components
+
+`ATTACH` connects a component instance to the parent garment at a specific location:
+
+```
+ATTACH(sleeve, {front.armhole, back.armhole})
+```
+
+### 10.4 Full Composition Example
+
+```
+COMPONENT notched_lapel { ... }
+COMPONENT two_piece_sleeve { ... }
+COMPONENT welt_pocket { ... }
+
+GARMENT blazer [SYM] {
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+
+  front = P(%torso.front + %leg[0..0.1], contour, 1.1)
+  back  = P(%torso.back + %leg[0..0.1], contour, 1.08)
+  side  = P(%torso.R[0..1], contour, 1.05)
+
+  -- Compose components
+  sleeve   = USE(two_piece_sleeve)
+  collar   = USE(notched_lapel)
+  pocket_L = USE(welt_pocket)
+
+  BUILD:
+    S(front.shoulder, back.shoulder, plain)
+    >> S(front.side, side.front, plain)
+    >> S(back.side, side.back, plain)
+    >> ATTACH(sleeve, {front.armhole, back.armhole})
+       [G(sleeve.top.cap, 1.12)]
+    >> ATTACH(collar, neck_opening)
+    >> ATTACH(pocket_L, front.pocket_mark.L)
+    >> C(front_opening, button(2), center)
+}
+```
+
+> **v0.2 note**: Composition via `USE`/`ATTACH` is new in v0.2. Components define their own internal build order, which runs before attachment. This allows a library of reusable components (sleeve types, collar types, pocket types) that can be mixed into different garments.
+
+---
+
+## 11. Extensions (future)
 
 - **Layering**: `OVER(garment_a, garment_b)` — describing how garments interact when worn together
 - **Animation / Movement**: coupling with Labanotation to describe how garments behave in motion
@@ -397,7 +470,7 @@ COMPONENT notched_lapel {
 
 ---
 
-## 11. Comparison to Existing Systems
+## 12. Comparison to Existing Systems
 
 | System          | Classifies | Generates | Encodes construction | Formal grammar |
 |-----------------|:----------:|:---------:|:-------------------:|:--------------:|

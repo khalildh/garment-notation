@@ -13,15 +13,16 @@ const STITCH_COLOR = '#94a3b8';
 
 export function assemble(ast) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
-  const block = ast.blocks[0];
-  const panels = extractPanelInfo(block);
-  const garmentType = detectGarmentType(panels, block);
+  const block = resolveMain(ast);
+  const resolved = resolveComponents(block, ast);
+  const panels = extractPanelInfo(resolved);
+  const garmentType = detectGarmentType(panels, resolved);
 
   switch (garmentType) {
-    case 'top': return drawTop(block, panels);
-    case 'skirt': return drawSkirt(block, panels);
-    case 'collar': return drawCollar(block, panels);
-    default: return drawGeneric(block, panels);
+    case 'top': return drawTop(resolved, panels);
+    case 'skirt': return drawSkirt(resolved, panels);
+    case 'collar': return drawCollar(resolved, panels);
+    default: return drawGeneric(resolved, panels);
   }
 }
 
@@ -45,10 +46,15 @@ function detectGarmentType(panels, block) {
   const names = Object.keys(panels);
   const regions = Object.values(panels).map(p => p.region);
 
-  if (names.some(n => n.includes('collar') || n.includes('lapel'))) return 'collar';
-  if (names.some(n => n.includes('sleeve')) || regions.some(r => r.includes('arm'))) return 'top';
-  if (names.some(n => n.includes('skirt')) || regions.some(r => r.includes('leg') && !r.includes('arm'))) return 'skirt';
-  if (regions.some(r => r.includes('torso'))) return 'top';
+  const hasCollar = names.some(n => n.includes('collar') || n.includes('lapel'));
+  const hasSleeve = names.some(n => n.includes('sleeve')) || regions.some(r => r.includes('arm'));
+  const hasTorso = names.some(n => n === 'front' || n === 'back') || regions.some(r => r.includes('torso'));
+  const hasLeg = regions.some(r => r.includes('leg') && !r.includes('arm'));
+
+  // A collar component alone is 'collar', but collar + body/sleeves is a 'top'
+  if (hasCollar && !hasSleeve && !hasTorso) return 'collar';
+  if (hasSleeve || hasTorso) return 'top';
+  if (hasLeg) return 'skirt';
   return 'generic';
 }
 
@@ -135,20 +141,109 @@ function drawTop(block, panels) {
     Z
   " fill="${FILL_FRONT}" stroke="${STROKE}" stroke-width="1.5" stroke-linejoin="round"/>`;
 
-  // Center line
-  svg += `<line x1="${cx}" y1="${topY - neckH * SCALE * 0.5}" x2="${cx}" y2="${topY + bh}"
-    stroke="${STITCH_COLOR}" stroke-width="0.7" stroke-dasharray="6,4"/>`;
+  // Detect features
+  const hasCollar = Object.keys(panels).some(n => n.includes('collar') || n.includes('lapel'));
+  const hasWelt = Object.keys(panels).some(n => n.includes('welt') || n.includes('pocket'));
+  const hasLining = Object.keys(panels).some(n => n.includes('lining'));
+  const hasButtons = block.build.some(s => {
+    const op = s.operation;
+    return op?.type === 'call' && op.name === 'C' && op.args?.some(a => a.type === 'call' && a.name === 'button');
+  });
+  const buttonCount = (() => {
+    for (const s of block.build) {
+      const op = s.operation;
+      if (op?.type === 'call' && op.name === 'C') {
+        const btnArg = op.args?.find(a => a.type === 'call' && a.name === 'button');
+        if (btnArg?.args?.[0]?.type === 'number') return btnArg.args[0].value;
+      }
+    }
+    return 0;
+  })();
+
+  if (hasCollar) {
+    // Lapel lines
+    const lapelW = bw * 0.12;
+    const lapelH = bh * 0.45;
+    const collarH = 14;
+
+    // Collar at neckline
+    svg += `<path d="
+      M ${cx - neckW * SCALE / 2 - 4},${topY - 2}
+      L ${cx - neckW * SCALE / 2 - 10},${topY - collarH}
+      Q ${cx},${topY - collarH - 6} ${cx + neckW * SCALE / 2 + 10},${topY - collarH}
+      L ${cx + neckW * SCALE / 2 + 4},${topY - 2}
+    " fill="${FILL_COLLAR}" stroke="${STROKE}" stroke-width="1.2" stroke-linejoin="round"/>`;
+
+    // Left lapel
+    svg += `<path d="
+      M ${cx - 3},${topY - neckH * SCALE * 0.3}
+      L ${cx - lapelW},${topY - 2}
+      L ${cx - lapelW - 6},${topY + lapelH}
+      L ${cx - 3},${topY + lapelH * 0.85}
+      Z
+    " fill="#e8e4df" stroke="${STROKE}" stroke-width="1" stroke-linejoin="round"/>`;
+
+    // Right lapel
+    svg += `<path d="
+      M ${cx + 3},${topY - neckH * SCALE * 0.3}
+      L ${cx + lapelW},${topY - 2}
+      L ${cx + lapelW + 6},${topY + lapelH}
+      L ${cx + 3},${topY + lapelH * 0.85}
+      Z
+    " fill="#e8e4df" stroke="${STROKE}" stroke-width="1" stroke-linejoin="round"/>`;
+
+    // Center opening line (instead of center dashed line)
+    svg += `<line x1="${cx}" y1="${topY - neckH * SCALE * 0.3}" x2="${cx}" y2="${topY + bh}"
+      stroke="${STROKE}" stroke-width="0.8"/>`;
+  } else {
+    // Center line
+    svg += `<line x1="${cx}" y1="${topY - neckH * SCALE * 0.5}" x2="${cx}" y2="${topY + bh}"
+      stroke="${STITCH_COLOR}" stroke-width="0.7" stroke-dasharray="6,4"/>`;
+
+    // Neck stitch
+    svg += neckStitch(cx, topY, neckW * SCALE, neckH * SCALE);
+  }
+
+  // Buttons
+  if (hasButtons && buttonCount > 0) {
+    const btnStart = topY + bh * 0.35;
+    const btnEnd = topY + bh * 0.75;
+    const btnSpacing = buttonCount > 1 ? (btnEnd - btnStart) / (buttonCount - 1) : 0;
+    for (let i = 0; i < buttonCount; i++) {
+      const by = buttonCount > 1 ? btnStart + btnSpacing * i : (btnStart + btnEnd) / 2;
+      svg += `<circle cx="${cx}" cy="${by}" r="3.5" fill="none" stroke="${STROKE}" stroke-width="1"/>`;
+      svg += `<circle cx="${cx}" cy="${by}" r="1" fill="${STROKE}"/>`;
+    }
+  }
+
+  // Welt pocket
+  if (hasWelt) {
+    const pocketW = bw * 0.22;
+    const pocketY = topY + bh * 0.52;
+    // Left pocket
+    svg += `<line x1="${cx - bw * 0.08}" y1="${pocketY}" x2="${cx - bw * 0.08 - pocketW}" y2="${pocketY}" stroke="${STROKE}" stroke-width="1.2"/>`;
+    svg += `<line x1="${cx - bw * 0.08}" y1="${pocketY + 3}" x2="${cx - bw * 0.08 - pocketW}" y2="${pocketY + 3}" stroke="${STITCH_COLOR}" stroke-width="0.6" stroke-dasharray="3,2"/>`;
+    // Right pocket
+    svg += `<line x1="${cx + bw * 0.08}" y1="${pocketY}" x2="${cx + bw * 0.08 + pocketW}" y2="${pocketY}" stroke="${STROKE}" stroke-width="1.2"/>`;
+    svg += `<line x1="${cx + bw * 0.08}" y1="${pocketY + 3}" x2="${cx + bw * 0.08 + pocketW}" y2="${pocketY + 3}" stroke="${STITCH_COLOR}" stroke-width="0.6" stroke-dasharray="3,2"/>`;
+  }
 
   // Hem stitch line
   const hemY = topY + bh - 8;
   svg += `<line x1="${bx + 4}" y1="${hemY}" x2="${bx + bw - 4}" y2="${hemY}"
     stroke="${STITCH_COLOR}" stroke-width="0.8" stroke-dasharray="4,3"/>`;
 
-  // Neck stitch
-  svg += neckStitch(cx, topY, neckW * SCALE, neckH * SCALE);
-
   // Labels
-  svg += `<text x="${cx}" y="${topY + bh / 2}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="13" font-weight="500" font-family="system-ui">front</text>`;
+  const labelParts = [];
+  if (hasCollar) labelParts.push('notched lapel');
+  if (hasLining) labelParts.push('lined');
+  if (hasWelt) labelParts.push('welt pockets');
+  const detailLabel = labelParts.length ? labelParts.join(' · ') : '';
+
+  svg += `<text x="${cx}" y="${topY + bh / 2 + (hasCollar ? 20 : 0)}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="13" font-weight="500" font-family="system-ui">front</text>`;
+  if (detailLabel) {
+    svg += `<text x="${cx}" y="${topY + bh / 2 + (hasCollar ? 34 : 14)}" text-anchor="middle" fill="${DIM_COLOR}" font-size="9" font-family="system-ui">${detailLabel}</text>`;
+  }
 
   // Dimensions
   const dimY = topY + bh + 28;
@@ -378,6 +473,59 @@ function dimensionLineV(x, y1, x2, y2, label) {
     <line x1="${x2 - 4}" y1="${y2}" x2="${x2 + 4}" y2="${y2}" stroke="${DIM_COLOR}" stroke-width="0.8"/>
     <text x="${x + 10}" y="${midY + 3}" fill="${DIM_COLOR}" font-size="9" font-family="system-ui">${label}</text>
   `;
+}
+
+// --- Component resolution ---
+
+function resolveMain(ast) {
+  return ast.blocks.find(b => b.type === 'garment') || ast.blocks[ast.blocks.length - 1];
+}
+
+function resolveComponents(block, ast) {
+  const components = {};
+  for (const b of ast.blocks) {
+    if (b.type === 'component') components[b.name] = b;
+  }
+
+  const expanded = [];
+  for (const decl of block.declarations) {
+    if (decl.value.type === 'call' && decl.value.name === 'USE') {
+      const compName = resolveRef(decl.value.args[0]);
+      const comp = components[compName];
+      if (comp) {
+        for (const cdecl of comp.declarations) {
+          if (cdecl.value.type === 'call' && cdecl.value.name === 'P') {
+            expanded.push({
+              ...cdecl,
+              name: decl.name + '.' + cdecl.name,
+              _component: compName,
+              _instance: decl.name,
+            });
+          }
+        }
+      }
+    } else {
+      expanded.push(decl);
+    }
+  }
+
+  const expandedBuild = [...block.build];
+  for (const decl of block.declarations) {
+    if (decl.value.type === 'call' && decl.value.name === 'USE') {
+      const compName = resolveRef(decl.value.args[0]);
+      const comp = components[compName];
+      if (comp) expandedBuild.push(...comp.build);
+    }
+  }
+
+  return { ...block, declarations: expanded, build: expandedBuild };
+}
+
+function resolveRef(expr) {
+  if (!expr) return '';
+  if (expr.type === 'reference') return expr.value;
+  if (expr.type === 'landmark') return expr.value.replace(/^@/, '');
+  return '';
 }
 
 function fmtCm(v) { return v.toFixed(1) + 'cm'; }
