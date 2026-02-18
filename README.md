@@ -81,6 +81,16 @@ See [converter/README.md](converter/README.md) for details on the mapping approa
 
 - **[Full Specification](garment-notation.md)** — the complete v0.2 spec
 
+## Star History
+
+<a href="https://www.star-history.com/#khalildh/garment-notation&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=khalildh/garment-notation&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=khalildh/garment-notation&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=khalildh/garment-notation&type=Date" width="600" />
+  </picture>
+</a>
+
 ## Status
 
 **v0.2 — Draft.** Includes grain parameter, directional ease, princess seams (EDGE), lining (LAYER), and component composition (USE/ATTACH). A starting point that will need refinement through use, critique, and input from garment-makers, pattern-drafters, and computational designers.
