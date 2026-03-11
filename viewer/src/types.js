@@ -98,6 +98,7 @@
  *   isLining: boolean,
  *   layerName?: string,
  *   shapeParams: Expr | null,
+ *   seams?: PanelSeam[],
  *   w?: number,
  *   h?: number,
  *   x?: number,
@@ -111,6 +112,10 @@
 
 /**
  * @typedef {{ panel: string, edge: string, landmark: string, curvature: number }} EdgeInfo
+ */
+
+/**
+ * @typedef {{ id: number, type: string, edge: string, partner: string, color: string }} PanelSeam
  */
 
 export {};

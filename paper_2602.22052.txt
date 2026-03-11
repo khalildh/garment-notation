@@ -1,0 +1,726 @@
+                                            AutoSew: A Geometric Approach to Stitching Prediction with Graph Neural
+                                                                         Networks
+
+                                                                Pablo Rı́os-Navarro1               Elena Garces2              Jorge Lopez-Moreno1
+                                                                 pablo.rios@urjc.es               elenag@adobe.com            jorge.lopez@urjc.es
+
+                                                                                  1
+                                                                                      Universidad Rey Juan Carlos, Madrid, Spain
+                                                                                              2
+                                                                                                Adobe Research, France
+arXiv:2602.22052v1 [cs.CV] 25 Feb 2026
+
+
+
+
+                                                     Input: 2D Pattern Contours                               AutoSew                                     Sewn Garment
+
+
+
+
+                                                                                                    M Stitching Edges <=> M Nodes
+
+                                         Figure 1. Left: AutoSew takes as input a 2D sewing pattern, consisting of the contours of the panels (24 in this example) and outputs the
+                                         edges that should be stitched together to assemble the garment. Middle: Our method models the stitching edges as a graph neural network
+                                         and leverages feature aggregation with an adaptive matching mechanism to efficiently solve a partial assignment problem. Multi-edge
+                                         stitching connections are shown in green, while one-to-one stitches are in blue. Right: 3D garment assembled from the resulting stitching
+                                         connections predicted by our model.
+
+                                                                   Abstract                                     enabling scalable garment assembly without manual input.
+                                                                                                                Our dataset and code are available online. 1
+                                             Automating garment assembly from sewing patterns re-
+                                         mains a significant challenge due to the lack of standard-
+                                         ized annotation protocols and the frequent absence of se-              1. Introduction
+                                         mantic cues. Existing methods often rely on panel labels               The fashion industry faces a dual challenge in its digi-
+                                         or handcrafted heuristics, which limit their applicability to          tal transformation: modernizing garment design workflows
+                                         real-world, non-conforming patterns. We present AutoSew,               while also integrating its vast legacy of existing patterns.
+                                         a fully automatic, geometry-based approach for predict-                Traditional garment manufacturing relies on skilled tailors
+                                         ing stitch correspondences directly from 2D pattern con-               who create the sewing patterns and subsequently anno-
+                                         tours. AutoSew formulates the problem as a graph match-                tate them with assembly instructions to guide the manu-
+                                         ing task, leveraging a Graph Neural Network to capture lo-             facturing process. However, this manual annotation pro-
+                                         cal and global geometric context, and employing a differ-              cess heavily relies on individual experience and intuition,
+                                         entiable optimal transport solver to infer stitching relation-         which often results in incomplete and non-standard anno-
+                                         ships—including multi-edge connections. To support this                tations; hence, posing a significant obstacle to automation.
+                                         task, we update the GarmentCodeData dataset modifying                  Although pattern vectorization is widely supported by com-
+                                         over 18k patterns with realistic multi-edge annotations, re-           mercial tools, these systems lack guidance for stitching pre-
+                                         flecting industrial assembly scenarios. AutoSew achieves               diction, which remains a bottleneck for automation. Bridg-
+                                         96% F1-score and successfully assembles 73.3% of test gar-             ing this gap—digitizing existing patterns for 3D assembly
+                                         ments without error, outperforming existing methods while              and seamless integration into digital workflows—is crucial
+                                         relying solely on geometric input. Our results demonstrate
+                                         that geometry alone can robustly guide stitching prediction,              1 https://mslab.es/projects/autosew/
+for realizing the full potential of digital garment creation.     fashion leverage knowledge about connected sewing edges.
+In this paper, we address the problem of automated garment        For instance, the simulation of 3D garments is quite de-
+assembly of sewing patterns, where the patterns have been         pendent on correct intersection-free initialization of the 2D
+digitized and vectorized but lack any semantic cue to guide       panels in 3D space. The automatic initialization system pro-
+the stitching process nor follow any standard.                    posed by Liu et al. [14] requires full stitching information
+    In contrast with previous approaches, we propose Au-          as input to initialize 68% of their garments correctly without
+toSew, a novel method that leverages Graph Neural Net-            additional user intervention.
+works (GNNs) to encode geometric features and predict                 An earlier approach to automatic stitching was proposed
+stitch correspondences without relying on semantic labels         by Berthouzoz et al. [1]. Their method combines machine
+or 3D information. By learning global embeddings, Au-             learning with integer programming to parse a dataset of
+toSew captures the essential properties of each panel edge,       standardized sewing patterns and stitch them into 3D gar-
+discerning subtle variations in edge geometry, and accu-          ments. Although this approach can handle decorative panels
+rately establishing stitch connections. Our key insight is        and multi-edge stitching, it is largely dependant on seman-
+that GNNs are ideally suited for modeling the complex rela-       tic annotations such as panel names and manually placed
+tionships inherent in sewing pattern data. Unlike traditional     notches —small alignment markers added to the pattern
+approaches that focus on local features, GNNs effectively         edges to guide the stitching process. In their 50-garments
+propagate information across the graph structure, captur-         dataset, they reported a 68% of correctly sewn full gar-
+ing both local and global geometric context. This allows          ments (GSP), and a 87% F1-score in automatic stitching.
+AutoSew to robustly predict stitch correspondences in non-        Regrettably, they state that their approach cannot solve the
+standardized patterns, even when local cues are ambiguous.        stitching problem without panel-level information, and their
+Furthermore, the inherent invariance of GNNs to graph size        dataset and code are not publicly available for comparison
+and node ordering ensures seamless adaptation to diverse          purposes.
+pattern sizes and structures.                                         One of the challenges that faces a learning-based solu-
+    A particularly challenging aspect of garment assembly         tion is the availability of data. Korosteleva and Lee [7] pro-
+is the presence of multi-edge stitch connections, where           posed a large dataset (20k garments) and a pattern generator
+a single edge must be stitched simultaneously to multi-           pipeline capable of creating novel variations. They further
+ple others. These configurations are common in indus-             improved the parametric pattern model and its generative
+trial patterns—for example, sleeves are often attached to         capabilities with a hierarchical, component-oriented pro-
+both the front and back torso panels in a one-to-many re-         gramming framework [9], which was later used to increase
+lationship. However, most existing datasets [7, 10, 28]           their original dataset to 115k garments [10], fitted to thou-
+and methods [2, 6, 8, 15, 18] assume one-to-one stitch-           sands of different bodies obtained from the parametric data-
+ing, which oversimplifies the actual construction logic. To       driven SMPL human model [16]. These datasets are mostly
+tackle this problem, we have created a novel dataset, M-          oriented to generating synthetic dressed humans, thus, lack
+E.G ARMENT C ODE DATA, which includes this kind of con-           real-world features such as multi-edge annotations.
+nections.
+    In summary, we present the following contributions:               The dataset from [7] has been used in several approaches
+                                                                  that aim to reconstruct the 3D garment from different in-
+• M-E.G ARMENT C ODE DATA, a dataset derived from
+                                                                  puts: N euralT ailor, created by Korosteleva et al. [8] fo-
+   G ARMENT C ODE DATA with multi-edge stitching connec-
+                                                                  cuses on reconstructing 2D garment sewing patterns from
+   tions that better reflect industry-level assembly scenarios.
+                                                                  3D point clouds of garment models. They use panel and
+• A geometry-based method that automatically predicts
+                                                                  stitching encoding and decoding with a combination of
+   multiple stitch correspondences in garment patterns with-
+                                                                  RNN (LSTM) and MLP modules. Liu et al. [15] in-
+   out relying on semantic annotations.
+                                                                  troduced SewF ormer, a method for recovering garment
+• A novel formulation of the problem that effectively com-
+                                                                  sewing patterns from single photos of dressed avatars. More
+   bines a Graph Neural Network with differentiable optimal
+                                                                  recently Chen et al. [2] presented P anelf ormer, for recon-
+   transport able to handle variable pattern sizes.
+                                                                  structing garment sewing patterns from 2D garment images.
+• Comprehensive validation and ablation studies evaluating
+                                                                  Both P anelf ormer and N euralT ailor share a very sim-
+   the contribution of each component of the proposed archi-
+                                                                  ilar stitching prediction submodule, based on a similarity
+   tecture.
+                                                                  matrix and a feature-space distance metric. Chen et al. [2]
+2. Related Work                                                   report an F1-score of 79.2% in automatic stitching, and
+                                                                  65.5% for N euralT ailor [8] on the same unseen test set.
+Despite the importance of user interaction in fashion CAD         In fact, Nakayama et al. [18] demonstrated that SewFormer
+[24], very little attention has been paid to automatic sewing     stitching accuracy collapses to 2.8% when re-evaluated on
+for 3D garment creation. Several applications in digital          the updated GarmentCodeData release [10].
+                                                              Concurrent work, GarmageNet [12] proposes a broader            3. AutoSew Architecture
+                                                          generative framework for digital garment modeling. Within
+                                                                                                                             The complexity and variability of sewing patterns—with
+                                                          this framework, they introduce GarmageJigsaw, which pre-
+                                                                                                                             their diverse shapes, sizes, and structures—demand an ad-
+                                                          dicts sewing connections using both 2D and 3D information
+                                                          through an ensemble of neural networks, partly inspired by         vanced approach that accounts for both local and global
+                                                                                                                             information. To address this challenge, we formulate Au-
+                                                          Jigsaw [17], a method for assembling fractured objects by
+                                                          combining edge matching and global reasoning.                      toSew as an end-to-end graph matching problem using a
+                                                                                                                             novel learning-based architecture. For automatic pattern
+                                                              These neural approaches report precision and recall only       stitching, the task is to identify valid edge pairings while
+                                                          on those outputs where the number and semantic identifi-           adhering to two constraints: (1) each edge can be stitched
+                                                          cation of both panels and edges were predicted correctly.          to one or more edges, and (2) some edges may remain un-
+                                                          This biased protocol may lead to an overestimation of their        stitched.
+                                                          stitching scores and warrants careful consideration. Fur-              An overview of the method is shown in Figure 2. First,
+                                                          thermore, stitching is treated as just one stage within a larger   we characterize each stitching edge as a set of geometric
+                                                          reconstruction pipeline that requires previous correct classi-     edges features, described in Section 3.1. Then, we build a
+                                                          fication of panels and ad-hoc labels. Industry-grade patterns      GNN where each node in the graph corresponds to a stitch-
+                                                          do not include 3D simulated data and lack most of the se-          ing edge and neighbor nodes are linked according to the 2D
+                                                          mantic information (pattern labels, annotated connections          topology of the pattern. The graph embeddings are learned
+                                                          or unique notches) that is required by previous work [1, 12].      to account for non-local relationships using iterative neigh-
+                                                          The need to minimize such assumptions to achieve unbiased          bor sampling (Section 3.2). Finally, we optimize the assign-
+                                                          automatic stitching in real production environments moti-          ment between stitching edges using global optimal transport
+                                                          vates our purely geometric approach.                               (Section 4). The process is learned end-to-end (Section 5).
+                                                              Another key consideration is that transformer-based
+                                                          models, despite their flexibility, rely on positional encod-       3.1. Geometric Edge Features
+                                                          ing to preserve the order of elements. This supports global        To characterize the edges, we extract a set of geometric fea-
+                                                          self-attention, but it also makes them sensitive to changes        tures (local shape descriptors and topological properties).
+                                                          in input size and panel ordering [4]. Therefore, extending         While state-of-the-art approaches [1] leverage semantic in-
+                                                          them to new pattern dimensions or topologies requires re-          formation such as the panel name (front, back, sleeve, etc.)
+                                                          training those positional embeddings. In contrast, GNNs            or edge-to-edge annotations (i.e. notches), our method re-
+                                                          propagate messages along the actual graph edges, need-             lies solely on geometric data. This design choice ensures
+                                                          ing no sequence encoding and handling any vertex order or          that our model remains independent from additional seman-
+                                                          graph size [5]. This structural inductive bias makes GNNs          tic dependencies, thereby improving its ability to generalize
+                                                          especially well-suited to stitching prediction, where rela-        across diverse sewing patterns. We define two distinct geo-
+                                                          tionships between panels are just as important as the enti-        metric feature types:
+                                                          ties themselves. GNNs have been applied to the problem of          • Local shape descriptors (18 dimensions). These fea-
+                                                          graph matching, that is, finding a correspondence between             tures capture the local shape of each edge, including its
+                                                          the nodes of two or more graphs, based on their structure             start and end vertices, length, orientation, curvature type,
+                                                          or attributes [13, 25, 30]. Feature matching is an interest-          and control point parameters.
+                                                          ing extension: Sarlin et al. [22] use a GNN (Superglue)            • Topological properties (4 dimensions). These describe
+                                                          to learn to match image features by considering their spa-            the contextual role of the edge within the panel, including
+                                                          tial relationships and contextual information instead of dis-         the interior angles with its adjacent edges (left and right),
+                                                          tance metrics, formulating the problem as an optimal trans-           the total number of edges in the panel, and a unique panel
+                                                          port solution. More recent methods also rely on message               identifier.
+                                                          passing, but learn directly from the output of combinato-          The full list of 22 geometric features per edge is detailed in
+                                                          rial solvers [20], or Quadratic Assignment Problem (QAP)           the Supplementary Material. We then apply a preprocessing
+                                                          formulations [26].                                                 pipeline to standardize feature values: we scale all geomet-
+                                                              We are particularly interested in the problem of partial       ric values by 1/100, normalize the per-panel edge count
+                                                          graph matching, a scenario where only a subset of nodes            to        using Min-Max scaling, and encode interior angles
+                                                          across multiple graphs have correspondences (i.e., only a          on both sides of each edge—left (sin αl , cos αl ) and right
+                                                          few edge pairs are valid matches in a garment). Wang et al.        (sin αr , cos αr )—to ensure rotational invariance and stabi-
+                                                          extend GNNs to the challenge of selecting the most relevant        lize the training [31]. Additionally, we sort edges in an-
+                                                          correspondences with a differentiable top-k discrete opera-        ticlockwise order and translate each panel so its lower-left
+                                                          tor [27], while Ratnayaka et al. [19] rely on a continuous         bounding-box corner lies at the origin. This yields a 24-
+                                                          optimization approach based on optimal partial transport.          dimensional feature vector             , which serves as input
+                                                    N_e
+[0,1]
+
+
+
+
+        \protect \mathbf  {x}\in \mathbb {R}^{24}
+                                                                                                                                                                                                                                                                                                                                                                                                           AutoSew Model                                  End-to-End Optimization                 Final Assignment        Sewn Pattern                            Assembled Garment
+                                                                                                                                                                                                                                                                                                                                                                                                                   Test
+                                                                                                                                                                                                                                                                                                                                                                       Input: Sewing Pattern                       Train
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                      Score Matrix              Hard Assignement Matrix
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            Panel 1                   Panel 2
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           z
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           z                                                Panel 6
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                             Panel 1                                                                                                       z
+                                                                                                                                                                                                                                                                                                                                                                                                 Panel 2
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           zz
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           z
+                                                                                                                                                                                                                                                                                                                                                                                                               …
+                                                                                                                                                                                                                                                                                                                                                                                       Panel 6                                                     …                                       z                                                            Panel 4
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Panel 3
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                  z   z   z   zz   z   z   z
+                                                                                                                                                                                                                                                                                                                                                                                                            Geometric      Graph Neural        Learned
+                                                                                                                                                                                                                                                                                                                                                                                                             Features        Network          embedding        M x M possible assignments                                                  Panel 5
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                Back-propagation
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          Loss (Eq. 5)
+
+
+                                                                                                                                                                                                                                                                                                                                                                   Figure 2. Overview of AutoSew. For each sewing pattern, a graph is constructed with nodes representing stitching edges and edges
+                                                                                                                                                                                                                                                                                                                                                                   capturing geometric relationships of the panels. A GNN with message passing learns embeddings for each edge, optimized for stitch
+                                                                                                                                                                                                                                                                                                                                                                   correspondence using a differentiable optimal transport loss.
+
+
+                                                                                                                                                                                                                                                                                                                                                                   to the GNN.                                                                                                                 This sampling and aggregation strategy allows the model
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            to adapt to varying graph structures and sizes. Furthermore,
+                                                                                                                                                                                                                                                                                                                                                                   3.2. Graph Neural Network                                                                                                the inherent invariance properties of GNNs are crucial for
+                                                                                                                                                                                                                                                                                                                                                                   We model the 2D patterns of each garment as a Graph Neu-                                                                 modeling sewing patterns. Permutation invariance ensures
+                                                                                                                                                                                                                                                                                                                                                                   ral Network [23] where each node in the graph corresponds                                                                consistent predictions regardless of edge indexing, while
+                                                                                                                                                                                                                                                                                                                                                                   to a stitching edge e, defined by a feature vector xe , and                                                              size invariance enables adaptation to patterns of varying
+                                                                                                                                                                                                                                                                                                                                                                   the connections between the nodes are created based on the                                                               complexity without manual padding as required in previous
+                                                                                                                                                                                                                                                                                                                                                                   topological shape of the 2D patterns. See the middle graph                                                               work [2, 15].
+                                                                                                                                                                                                                                                                                                                                                                   example in Figure 1. Each graph of a garment is defined
+                                                                                                                                                                                                                                                                                                                                                                   by M nodes which correspond to all the available stitching                                                               4. Differentiable Optimal Transport
+                                                                                                                                                                                                                                                                                                                                                                   edges from all panels. This graph representation facilitates                                                             This section details the differentiable optimization strategy
+                                                                                                                                                                                                                                                                                                                                                                   learning long-range dependencies between stitching edges                                                                 employed by AutoSew for solving the assignment prob-
+                                                                                                                                                                                                                                                                                                                                                                   through node embeddings.                                                                                                 lem in garment edge matching. Leveraging Optimal Trans-
+                                                                                                                                                                                                                                                                                                                                                                       We formulate the problem as inductive learning and em-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            port (OT) theory and the Sinkhorn algorithm, AutoSew
+                                                                                                                                                                                                                                                                                                                                                                   ploy an efficient strategy to aggregate information from
+                                                                                                                                                                                                                                                                                                                                                                   non-neighbor nodes. In particular, we use GraphSAGE [5]                                                                  enables end-to-end differentiable learning, addressing the
+                                                                                                                                                                                                                                                                                                                                                                   which learns node embedding by a sampling and aggrega-                                                                   limitations of traditional non-differentiable methods, such
+                                                                                                                                                                                                                                                                                                                                                                   tion strategy. This approach allows the model to adapt to                                                                as the Hungarian algorithm [11] and integer optimization
+                                                                                                                                                                                                                                                                                                                                                                   different graph structures and sizes, improving its ability to                                                           techniques— which require separate optimization steps and
+                                                                                                                                                                                                                                                                                                                                                                   predict stitching connections in new sewing patterns. In the                                                             struggle to adapt to dynamic data. See Supplementary Ma-
+                                                                                                                                                                                                                                                                                                                                                                   GraphSAGE learning process, each node is initialized with                                                                terial for a complete explanation of the Sinkhorn algorithm
+                                                                                                                                                                                                                                                                                                                                                                   the feature vector xe which is iteratively updated by aggre-
+                                                                                                                                                                                                                                                                                                                                                                   gating features from its neighbors in L hidden layers (or                                                                4.1. Partial Assignment Formulation
+                                                                                                                                                                                                                                                                                                                                                                   steps). Formally, for a node at layer , the aggregation                                                                  Our goal is to estimate an assignment matrix P ∈
+                                                                                                                                                                                                                                                                                                                                                                   update can be formulated as:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            [0, 1]M ×M , that encodes whether two edges are stitched to-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            gether or remain unpaired. Traditional assignment meth-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ods [11, 29] typically require pairing every element; how-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                          (1)               ever, garment edge sewing requires a more flexible ap-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            proach wherein certain edges may remain unstitched, ne-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            cessitating a partial assignment strategy that allows for un-
+                                                                                                                                                                                                                                                                                                                                                                    where       represents the node embedding at layer ,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            matched elements without compromising overall solution
+                                                                                                                                                                                                                                                                                                                                                                   denotes the set of neighbors of ,         is the mean aggre-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            quality. This can be done by flexibilizing the constraints of
+                                                                                                                                                                                                                                                                                                                                                                   gation function,        is a learnable weight matrix, and
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            P so that,
+                                                                                                                                                                                                                                                                                                                                                                   is a non-linear activation function. This iterative process
+                                                                                                                                                                                                                                                                                                                                                                   allows each node to incorporate information from an ex-                                                                                                                                                            (2)
+                                                                                                                                                                                                                                                                                                                                                                   panding receptive field, thus capturing both local and more
+                                                                                                                                                                                                                                                                                                                                                                   global structural patterns within the graph. The final feature                                                           allowing us to pose the problem in a learning framework
+                                                                                                                                                                                                                                                                                                                                                                   vector of the edge will be fe = hL e ∈R .
+                                                                                                                                                                                                                                                                                                                                                                                                            D
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            without requiring complex linear programming solvers [1].
+                           e 
+
+
+
+
+                                                  l 
+
+
+
+
+                                                        h_e^{(l+1)} = \sigma \Big ( W^{(l)} \cdot \text {CONCAT} \Big ( h_e^{(l)}, \\ \text {AGG} \Big ( \{ h_e^{(l)} \mid e \in \mathcal {N}(e) \} \Big ) \Big ) \Big )
+ h_e^{(l)} 
+
+
+
+
+                                                                        l 
+
+
+
+
+                                                                                                                                                                                                                            \mathcal {N} 
+                            e 
+
+
+
+
+                                  \text {AGG} 
+               W^{(l)} 
+
+
+
+
+                                                                                                                                                                                                                                 \sigma 
+
+
+
+
+                                                                                                                                                                                                                                              \mathbf {P} \mathbf {1}_{M} \leq \mathbf {1}_{M}, \quad \mathbf {P}^{\top } \mathbf {1}_{M} \leq \mathbf {1}_{M}, 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               The assignment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      P        problem consists of maximizing a global           where P̄ is the extended soft assignment matrix which in-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               score, i,j Ci,j Pi,j , where C ∈ RM ×M encodes the pair-          cludes unstitched and stitched edges, and A is the set of
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               wise cost of an assignment between two stitching edges i          ground truth assignments, including both matched pairs M
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               and j.                                                            and unstitched edges assigned to the dustbin.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 5.2. Final Hard Assignment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Score Prediction We build the cost matrix C with all
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               the possible pairings. As opposed to previous work [21],          The previous optimization process yields a soft-assignment
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               which often frame the problem as bipartite matching of two        matrix P̄ that contains two potential solutions. To derive a
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               independent disjoint sets, our formulation involves match-        unique assignment while ensuring normalization, we com-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               ing a single set with itself, where each sewing edge can be       pute the element-wise average of the upper and lower trian-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               paired with any other except itself. This requires modify-        gular components:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               ing the Sinkhorn algorithm to enforce structural constraints
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               while maintaining probabilistic soft assignments, which we                                                                  (6)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               explain in Supplementary Material. To compute pairwise
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               costs, we define the similarity between sewing edges using           This operation yields a probability distribution for each
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               the inner product between the feature vectors of the edges:       row (or column) of the symmetrized score matrix . To
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 support multi-edge stitching, we proceed as follows: for
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          (3)    each row we sort the probabilities in descending order and
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 always keep the highest-scoring entry                     .
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               where ⟨·, ·⟩ denotes the inner product of vectors. Since the
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    In addition, we retain every other entry whose prob-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               cost matrix is symmetric, the assignment process ensures
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ability satisfies                , where         is a prede-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               global consistency across all subsets while preserving struc-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 fined threshold that controls the number of allowable multi-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               tural dependencies between sewing edges.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 edge connections. If no additional probabilities exceed this
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 threshold, the assignment defaults to a single-edge match.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               Unstitched Edges To enable AutoSew to suppress cer-               For further implementation details, see Section 7.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               tain sewing edges when necessary, we introduce a dummy
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               assignment mechanism that explicitly handles unmatched            6. Multi-Edge Stitching Dataset
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               edges. This technique, common in graph matching [3, 21],
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               assigns unmatched elements to a dustbin node, thereby             We build on the dataset G ARMENT C ODE DATA . V 2 [10],
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               avoiding forced and potentially incorrect assignments.            which contains over 128K sewing pattern samples spanning
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  To implement this mechanism, we augment the original           a wide range of designs, over 1.3 million panels (ranging
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               cost matrix C by appending an additional row and column,          from 2 to 37 panels per pattern, with an average of 10) and
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               resulting in an extended matrix C̄ ∈ R(M +1)×(M +1) . The         4.8 million edges (averaging 10 edges per panel). Each gar-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               extra row and column correspond to assignments to the bin,        ment pattern includes approximately 37 stitching connec-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               ensuring that unmatched edges are explicitly accounted for        tions, capturing the structural complexity typical of real-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               and are either assigned to a corresponding edge from an-          world garment construction. This dataset, despite its scale,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               other subset or placed in the dustbin. The point-to-bin and       is restricted to one-to-one stitch connections —a simplifica-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               bin-to-bin scores are regulated by a single learnable param-      tion that fails to reflect the multi-edge stitching commonly
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               eter z ∈ R, such that,                                            required in practical manufacturing settings. To address this
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 limitation, we collaborated with a professional fashion de-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          (4)    signer, identifying two important oversimplifications of the
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 patterns:
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               This generalization to the matching problem results in a
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 • Sleeve division: Real-world sleeves are typically cut as a
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               symmetric extended cost matrix.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    single panel. This is usually sewn to one cuff and attached
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               5. End-to-End Optimization                                           simultaneously to both front and back torsos in a multi-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    to-one configuration. The original dataset, by contrast,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               5.1. Loss                                                            represents sleeves as two mirrored halves with only one-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               The proposed architecture is fully differentiable, facilitating      to-one stitch annotations.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               end-to-end training. We use ground truth matches and un-          • Upper-body division: Industrial patterns often treat each
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               matched edges as supervision. We minimize the negative               torso (front or back) as a unified panel. However, the
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               log-likelihood of the predicted assignment matrix,                   dataset splits both into separate pieces, introducing arti-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ficial seams that do not reflect the real ones.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          (5)    Each pattern affected by the simplifications described previ-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ously was automatically detected and processed as follows.
+                                                                                                                                                                                                                                                                        \label {eq:average} \mathbf {P}' = \frac {1}{2} (\bar {\mathbf {P}} + \bar {\mathbf {P}}^\top ). 
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                          \protect \mathbf  {P}'
+  \mathbf {C}_{i,j} = \langle \mathbf {f}_i, \mathbf {f}_j \rangle , \quad \forall (i, j) \in M \times M. 
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                   i^{*}=\arg \max _i p_{ij}
+                                                                                                                                                                                                                                                                                                                                                                            p_{ij}\ge \tau _{\mathrm {multi}}
+
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                \tau _{\mathrm {multi}}
+                                                                                                                                                                                                   \bar {C}_{i, M+1} = \bar {C}_{M+1, j} = \bar {C}_{M+1, M+1} = z. 
+                                                                                                               \text {Loss} = - \sum _{(i,j) \in \mathcal {A}} \log \bar {\mathbf {P}}_{i,j}, 
+                                      (a) Original Pattern Sewing        (b) Original draped garment   forms T = 100 iterations for partial assignment in stitching
+                                                                                                       prediction. We set the multi-edge threshold
+                                                                                                       based on ablation studies (Section 8.3), exploring the trade-
+                                                                                                       off among the metrics. The whole pipeline is implemented
+                                                                                                       in PyTorch and trained on an NVIDIA RTX 4090 GPU with
+                                                                                                       a 0.001 learning rate over 18 epochs, achieving efficient
+                                                                                                       convergence. A forward pass takes approximately 7 ms for
+                                                                                                       a typical garment pattern.
+
+                                                                                                       8. Evaluation
+                                       (c) Merged Pattern Sewing           (d) New draped garment
+                                                                                                       In this section, we present quantitative metrics to evalu-
+                                                                                                       ate the stitching prediction accuracy and robustness of our
+                                                                                                       method, as well as ablation studies to analyze the impact of
+                                                                                                       key components. It is important to note that, in neural state-
+                                                                                                       of-the-art approaches such as SewFormer [15], the embed-
+                                                                                                       ding representation is inherently entangled with the learning
+                                                                                                       operation. It is not possible to disentangle token learning
+                                                                                                       from the stitching process without fundamentally modify-
+                                                                                                       ing their original framework for comparison purposes.
+                              Figure 3. Comparison of sewing patterns and draped avatars be-           8.1. Metrics
+                              fore and after multi-edge merging. Top: original dataset with one-
+                              to-one stitches, showing artificial seam marks. Bottom: our Multi-       We evaluate AutoSew’s performance using seven metrics.
+                              Edge dataset with realistic multi-to-one stitches, producing more        Total Precision (TP) measures the proportion of correctly
+                              natural seams and garment reconstructions.                               predicted stitch correspondences among all predicted edges,
+                                                                                                       while Total Recall (TR) quantifies the fraction of ground-
+                                                                                                       truth correspondences successfully identified. Total F1-
+                              For patterns containing sleeves, we applied a three-step pro-            score (TF1) balances these two measures, providing an
+                              cedure: (1) Panel mirroring: the back-sleeve panel is re-                overall metric of accuracy. To specifically evaluate multi-
+                              flected across its horizontal axis, and the back-cuff panel              edge stitching, we compute these metrics on the sub-
+                              across its vertical axis; (2) Geometric merging: each mir-               set of multi-edge connections, yielding Multi-edge Preci-
+                              rored sleeve and cuff half is merged with its front counter-             sion (MEP), Multi-edge Recall (MER), and their harmonic
+                              part when their edge curvature and length are compatible;                mean, the Multi-edge F1-score (MEF1).
+                              (3) Edge collapsing: adjacent edges in the merged panels                    Finally, we introduce Garment Sewn Percentage (GSP)
+                              are collapsed and concatenated, and the original stitch an-              which is the ratio of correctly resolved patterns (i.e., those
+                              notations are transferred to the resulting combined edges                where all ground-truth stitch correspondences are predicted
+                              to encode multi-edge connections. For the upper body, we                 correctly) to the total number of test patterns. GSP pro-
+                              merge front and back torso panels while preserving the orig-             vides a practical measure of AutoSew’s effectiveness in
+                              inal stitch maps. This workflow yields over 18K updated                  real-world garment assembly. All metrics are computed
+                              patterns with more realistic multi-edge stitching relation-              from the M × M hard assignment matrix produced by the
+                              ships, released as the M-E.G ARMENT C ODE DATA dataset                   optimizer, excluding edges assigned to the dustbin.
+                              (where M-E stands for Multi-Edge); see sample in Fig. 3.
+                              Full implementation details are provided in the Supplemen-               8.2. Accuracy and Comparison
+                              tary Material. The dataset is randomly split into training,
+                              validation, and test sets in an 80-10-10 ratio.                          Accuracy We evaluate accuracy on the test set, obtain-
+                                                                                                       ing 96.1% TP, 96.3% TR, and 96.2% TF1; for multi-edge
+                              7. Implementation Details                                                stitching it achieves 80.4% MEP and 89.5% MER, yielding
+                                                                                                       a 84.7% MEF1. Overall, the model fully resolves 73.3%
+                              The AutoSew pipeline uses a GraphSAGE-based GNN with                     of the test garment patterns (GSP). For comparison, on
+                              L = 5 hidden layers, each with 512 neurons and ReLU ac-                  the original G ARMENT C ODE DATA . V 2, which only con-
+                              tivations, to process 24-dimensional edge features. Mean                 tains one-to-one stitchings, AutoSew reaches 97.19% pre-
+                              pooling aggregates neighbors, producing embeddings with                  cision, 96.93% recall, and 97.06% F1-score, fully resolv-
+                              D = 128 dimensions to capture local and global pattern                   ing 80.60% of the test garment patterns (GSP). The higher
+                              relationships. The differentiable Sinkhorn algorithm per-                performance on this dataset is expected, as it represents
+\tau _{\mathrm {multi}}=0.4
+                         Figure 4. Random results showcasing actual patterns from the M-E.G ARMENT C ODE DATA.
+
+
+    a simpler setting without multi-to-one cases, whereas M-                       Config.              TF1 / MEF1     GSP
+    E.G ARMENT C ODE DATA introduces more realistic stitch-
+                                                                                   Full                  96.2 / 84.7    73.3
+    ing scenarios that are inherently more challenging. Some
+                                                                                   w/o Panel ID          87.7 / 72.4    45.3
+    fully assembled results are shown in Figure 4. We have
+                                                                                   w/o Topol. Prop.      78.8 / 73.7    30.5
+    observed that a significant proportion of failure cases hap-
+    pens when multiple panels share identical shapes, a com-
+                                                                      Table 1. Ablation study on the geometric descriptors. Both topo-
+    mon occurrence rendering them interchangeable. This per-
+                                                                      logical properties and the Panel ID (unique panel identifier) are
+    formance degradation is attributed to mislabeling during
+                                                                      crucial for stitching prediction performance.
+    training, where valid solutions are incorrectly classified as
+    failures due to the use of correct stitches as ground truth.
+                                                                      What we observe is a decrease of more than 2% in TF1, 4%
+    8.3. Ablation Studies                                             in MEF1 and a drop of nearly 15% in GSP. These results
+    In this section, we analyze the impact of the most relevant       emphasize the importance of message passing for the com-
+    decisions of the pipeline: the selection of geometric fea-        plete garment assembly.
+    tures, the size of the GNN, the number of iterations of the
+    optimal transport problem, and the confidence threshold for          Config.      TP/MEP          TR/MER      TF1/MEF1     GSP
+    the assignment.
+                                                                         Full         96.1/80.4       96.3/89.5    96.2/84.7   73.3
+                                                                         w/o GNN      93.2/71.2       94.2/92.9    93.7/80.6   58.6
+    Impact of the Geometric Features We further analyze
+    the contribution of the different geometric descriptors used      Table 2. Ablation study results on the test set. Removing message
+    in AutoSew. In particular, we remove two components: (i)          aggregation (GraphSAGE) severely impacts performance, partic-
+    the Panel ID, a unique identifier assigned to each panel,         ularly GSP.
+    and (ii) the topological properties. The results in Table 1
+    show that eliminating Panel ID degrades performance,
+    especially in GSP, confirming that unique panel identifiers       Effect of GNN Design Choices Table 3 shows the perfor-
+    complement geometry by helping to disambiguate symmet-            mance of several versions of the architecture of the GNN by
+    ric or repetitive edges. Removing topological properties, on      varying the number of hidden layers and the aggregation op-
+    the other hand, causes a sharp drop of nearly 18% in TF1          erator. The number of hidden layers determines the recep-
+    and more than 40% in GSP, underlining their importance            tive field size so that a larger receptive field allows nodes to
+    for capturing global garment structure. Overall, these abla-      aggregate information from more distant neighbors poten-
+    tions demonstrate that the full feature set provides the most     tially improving performance. However, excessive depth
+    effective representation, and that both local shape descrip-      can lead to over-smoothing, where node embeddings be-
+    tors and topological properties are crucial for accurate and      come too similar, reducing model effectiveness. This ef-
+    robust stitching prediction.                                      fect can be observed in all the metrics and mainly in the
+                                                                      GSP, where the best result is obtained with 5 layers (our
+    Impact of the Pipeline Design We analyze the impact of            final model) and the worst results are obtained using 3 lay-
+    the different design decisions of AutoSew. We replace the         ers. Increasing the number of layers to seven results in a
+    GNN with a simple Multi-Layer Perceptron (MLP) using              substantial drop in GSP (71.6%), indicating that excessive
+    identical hyperparameters but without message aggregation.        information aggregation from neighbors, may dilute crucial
+u
+
+
+
+
+u
+                                                                                                                                                                  local features. MEF1 follows a similar trend to TF1 and
+                                                                                                                                                                  GSP, achieving its best results with a 5-layer GNN.
+                                                                                                                                                                     Additionally, we experimented with replacing Au-
+                                                                                                                                                                  toSew’s default MEAN aggregator with a MAX aggregator
+                                                                                                                                                                  while keeping five hidden layers. As shown in Table 3,
+                                                                                                                                                                  this alternative configuration yields similar results, achiev-
+                                                                                                                                                                  ing 96.1% TF1 and 84.8% MEF1. While MAX aggrega-
+                                                                                                                                                                  tion slightly reduces GSP compared to the mean-based ap-
+                                                                                                                                                                  proach, it maintains competitive performance, suggesting
+                                                                                                                                                                  that the model is robust to different aggregation strategies.
+
+                                                                                                                                                                       GNN layers       Total F1         Multi-edge F1    GSP           Figure 5. Impact of confidence threshold on AutoSew’s stitching
+                                                                                                                                                                                                                                        prediction performance.
+                                                                                                                                                                       L=3                 94.3              81.8          61.8
+                                                                                                                                                                       L=5                 96.2              84.7          73.3
+                                                                                                                                                                       L=7                 96.0              78.9          71.6               at 0.4 in our experiments, this value can be adapted to
+                                                                                                                                                                       5 + Max             96.1              84.8          72.4         new datasets depending on the expected frequency of multi-
+                                                                                                                                                                                                                                        edge seams.
+                                                                                                                                                                  Table 3. Impact of GNN depth and aggregation method on stitch-
+                                                                                                                                                                  ing prediction performance. Increasing the number of layers im-       9. Conclusions and Future Work
+                                                                                                                                                                  proves performance up to L = 5, but deeper networks (L = 7)
+                                                                                                                                                                  exhibit reduced GSP due to over-smoothing. Using max aggrega-         We have introduced AutoSew, the first fully automatic, end-
+                                                                                                                                                                  tion instead of mean results in similar performance, with a slight    to-end framework capable of inferring multi-edge stitch-
+                                                                                                                                                                  drop in recall.                                                       ing connections purely from geometric features. Thanks
+                                                                                                                                                                                                                                        to a novel formulation leveraging GNN and differen-
+                                                                                                                                                                                                                                        tiable optimal transport, our method achieves state-of-the-
+                                                                                                                                                                  Impact of Sinkhorn Iterations (T ) Table 4 highlights the             art accuracy, robustly handles pattern variability, and re-
+                                                                                                                                                                  trade-off between accuracy and computational efficiency               moves the need for semantic labels. Its streamlined de-
+                                                                                                                                                                  when varying the number of Sinkhorn iterations.                       sign simplifies its application to diverse digital garment
+                                                                                                                                                                                                                                        data models, making it well-suited for industrial manu-
+                                                                                                                                                                                                                                        facturing. In addition, we also provide a novel dataset,
+                                                                                                                                                                            Configuration         TF1      MEF1     Time
+                                                                                                                                                                                                                                        M-E.G ARMENT C ODE DATA, an updated version of G AR -
+                                                                                                                                                                            T = 500               97.1      84.5    26ms                MENT C ODE DATA . V 2, enriched with multi-edge annota-
+                                                                                                                                                                            T = 100               97.0      84.7    7ms                 tions, establishing a new benchmark for industrial applica-
+                                                                                                                                                                                                                                        tions.
+                                                                                                                                                                  Table 4. Effect of Sinkhorn iterations (T ) on stitching prediction      While our approach achieves good and consistent results
+                                                                                                                                                                  performance and inference time.                                       with the most common multiedge stitches (2-to-1), to im-
+                                                                                                                                                                                                                                        prove generalization to real-world patterns, we plan to col-
+                                                                                                                                                                     Reducing Sinkhorn iterations from T = 500 to T = 100               lect and expand the generation of samples on our real-world
+                                                                                                                                                                  cuts inference runtime by nearly 3× with minimal impact               dataset including -to-1 stitching connectivities. We ex-
+                                                                                                                                                                  on accuracy.                                                          pect that, by adjusting our multi-edge threshold τmulti the
+                                                                                                                                                                                                                                        model will flexibly accommodate different types of multi-
+                                                                                                                                                                  Ablation of the Multi-Edge Threshold                To quan-          edge connections, ranging from simple two-to-one seams
+                                                                                                                                                                  tify how the multi-edge threshold          affects both total         to more intricate configurations. Also, adaptive learning
+                                                                                                                                                                  accuracy and multi-edge recovery, we swept              from          of this parameter could have a potentially high impact on
+                                                                                                                                                                  0.05 to 0.5 and measured the performance. Table 5 summa-              improving robustness, as well as combining our automatic
+                                                                                                                                                                  rizes the results. We observe that both TF1 and MEF1 reach            predictions with semantic labels, if available. Furthermore,
+                                                                                                                                                                  their peak values when setting the threshold                .         additional topology preprocessing could be learned, to sub-
+                                                                                                                                                                  This confirms that a moderate threshold balances precision            divide the input sewing edges and reduce the number (N )
+                                                                                                                                                                  and recall, effectively capturing true multi-edge connec-             of simultaneous connections.
+                                                                                                                                                                  tions without introducing excessive noise. Notably, per-                 AutoSew is, to our knowledge, the first automatic stitch-
+                                                                                                                                                                  formance on multi-edge predictions drops sharply beyond               ing method that works solely with simple 2D geometric
+                                                                                                                                                                                , as higher thresholds prevent assigning more           shapes, requiring no custom semantics, annotations, or 3D
+                                                                                                                                                                  than two edges to the same counterpart. Although we fix               data, while also explicitly supporting multi-edge stitching.
+                                                                                                                                    \tau _{\mathrm {multi}}
+
+
+
+
+                                                                                                                                                              N
+                                                                                \tau _{\mathrm {multi}}
+                                \tau _{\mathrm {multi}}
+
+
+
+
+                                                                                                          \tau _{\mathrm {multi}}
+                                                          \tau _{\mathrm {multi}} = 0.4
+\tau _{\mathrm {multi}} = 0.5
+Acknowledgements                                                    [13] Yujia Li, Chenjie Gu, Thomas Dullien, Oriol Vinyals, and
+                                                                         Pushmeet Kohli. Graph matching networks for learning the
+Grant PID2021-122392OB-I00 funded by MCIN/AEI/                           similarity of graph structured objects. In Proceedings of the
+10.13039/501100011033 and by ESF Investing in your fu-                   36th International Conference on Machine Learning, pages
+ture. It is also part of the project TaiLOR, CPP2021-008842              3835–3845. PMLR, 2019. 3
+funded by MCIN/AEI/10.13039/501100011033 and the                    [14] Chen Liu, Weiwei Xu, Yin Yang, and Huamin Wang. Au-
+NextGenerationEU / PRTR programs.                                        tomatic digital garment initialization from sewing patterns.
+                                                                         ACM Trans. Graph., 43(4), 2024. 2
+References                                                          [15] Lijuan Liu, Xiangyu Xu, Zhijie Lin, Jiabin Liang, and
+                                                                         Shuicheng Yan. Towards Garment Sewing Pattern Recon-
+ [1] Floraine Berthouzoz, Akash Garg, Danny M. Kaufman, Ei-              struction from a Single Image. ACM Transactions on Graph-
+     tan Grinspun, and Maneesh Agrawala. Parsing sewing pat-             ics, 42(6):1–15, 2023. arXiv:2311.04218 [cs]. 2, 4, 6
+     terns into 3D garments. ACM Transactions on Graphics, 32       [16] Matthew Loper, Naureen Mahmood, Javier Romero, Gerard
+     (4):1–12, 2013. 2, 3, 4                                             Pons-Moll, and Michael J. Black. Smpl: a skinned multi-
+ [2] Cheng-Hsiu Chen, Jheng-Wei Su, Min-Chun Hu, Chih-Yuan               person linear model. ACM Trans. Graph., 34(6), 2015. 2
+     Yao, and Hung-Kuo Chu. Panelformer: Sewing pattern re-         [17] Jiaxin Lu, Yifan Sun, and Qixing Huang. Jigsaw: Learning
+     construction from 2d garment images. In Proceedings of the          to assemble multiple fractured objects, 2023. 3
+     IEEE/CVF Winter Conference on Applications of Computer         [18] Kiyohiro Nakayama, Jan Ackermann, Timur Levent Kes-
+     Vision (WACV), pages 454–463, 2024. 2, 4                            dogan, Yang Zheng, Maria Korosteleva, Olga Sorkine-
+ [3] Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabi-                 Hornung, Leonidas J. Guibas, Guandao Yang, and Gordon
+     novich. Superpoint: Self-supervised interest point detection        Wetzstein. AIpparel: A Large Multimodal Generative Model
+     and description. CoRR, abs/1712.07629, 2017. 5                      for Digital Garments, 2024. arXiv:2412.03937 [cs]. 2
+ [4] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,         [19] Gathika Ratnayaka, James Nichols, and Qing Wang. Learn-
+     Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,                 ing partial graph matching via optimal partial transport. In
+     Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-            The Thirteenth International Conference on Learning Rep-
+     vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is          resentations, 2025. 3
+     worth 16x16 words: Transformers for image recognition at       [20] Michal Rolı́nek, Paul Swoboda, Dominik Zietlow, Anselm
+     scale, 2021. 3                                                      Paulus, Vı́t Musil, and Georg Martius. Deep Graph Match-
+ [5] William L. Hamilton, Rex Ying, and Jure Leskovec. Induc-            ing via Blackbox Differentiation of Combinatorial Solvers,
+     tive representation learning on large graphs, 2018. 3, 4            page 407–424. Springer International Publishing, 2020. 3
+ [6] Kai He, Kaixin Yao, Qixuan Zhang, Lingjie Liu, Jingyi          [21] Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz,
+     Yu, and Lan Xu. DressCode: Autoregressively Sewing                  and Andrew Rabinovich.           Superglue: Learning fea-
+     and Generating Garments from Text Guidance, 2024.                   ture matching with graph neural networks.             CoRR,
+     arXiv:2401.16465 [cs]. 2                                            abs/1911.11763, 2019. 5
+ [7] Maria Korosteleva and Sung-Hee Lee. Generating datasets        [22] Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz,
+     of 3d garments with sewing patterns. In Proceedings of the          and Andrew Rabinovich. Superglue: Learning feature
+     Neural Information Processing Systems Track on Datasets             matching with graph neural networks. In Proceedings of
+     and Benchmarks, 2021. 2                                             the IEEE/CVF Conference on Computer Vision and Pattern
+ [8] Maria Korosteleva and Sung-Hee Lee. Neuraltailor: re-               Recognition (CVPR), 2020. 3
+     constructing sewing pattern structures from 3d point clouds    [23] Franco Scarselli, Marco Gori, Ah Chung Tsoi, Markus Ha-
+     of garments. ACM Transactions on Graphics, 41(4):1–16,              genbuchner, and Gabriele Monfardini. The graph neural net-
+     2022. 2                                                             work model, 2009. 4
+ [9] Maria Korosteleva and Olga Sorkine-Hornung. Garment-           [24] Nobuyuki Umetani, Danny M. Kaufman, Takeo Igarashi, and
+     Code: Programming parametric sewing patterns. ACM                   Eitan Grinspun. Sensitive couture for interactive garment
+     Transaction on Graphics, 42(6), 2023. SIGGRAPH ASIA                 modeling and editing. In ACM SIGGRAPH 2011 Papers,
+     2023 issue. 2                                                       New York, NY, USA, 2011. Association for Computing Ma-
+[10] Maria Korosteleva, Timur Levent Kesdogan, Fabian Kem-               chinery. 2
+     per, Stephan Wenninger, Jasmin Koller, Yuhan Zhang, Mario      [25] Runzhong Wang, Junchi Yan, and Xiaokang Yang. Learning
+     Botsch, and Olga Sorkine-Hornung. GarmentCodeData: A                combinatorial embedding networks for deep graph matching.
+     Dataset of 3D Made-to-Measure Garments With Sewing Pat-             In Proceedings of the IEEE/CVF International Conference
+     terns, 2024. arXiv:2405.17609 [cs]. 2, 5                            on Computer Vision (ICCV), 2019. 3
+[11] H. W. Kuhn. The Hungarian method for the assignment            [26] Runzhong Wang, Junchi Yan, and Xiaokang Yang. Neural
+     problem. Naval Research Logistics Quarterly, 2(1-2):83–97,          graph matching network: Learning lawler’s quadratic assign-
+     1955. 4                                                             ment problem with extension to hypergraph and multiple-
+[12] Siran Li, Chen Liu, Ruiyang Liu, Zhendong Wang, Gaofeng             graph matching. IEEE Transactions on Pattern Analysis and
+     He, Yong-Lu Li, Xiaogang Jin, and Huamin Wang. Garma-               Machine Intelligence, 44(9):5261–5279, 2022. 3
+     genet: A multimodal generative framework for sewing pat-       [27] Runzhong Wang, Ziao Guo, Shaofei Jiang, Xiaokang Yang,
+     tern design and generic garment modeling, 2025. 3                   and Junchi Yan. Deep learning of partial graph matching
+     via differentiable top-k. In Proceedings of the IEEE/CVF
+     Conference on Computer Vision and Pattern Recognition
+     (CVPR), pages 6272–6281, 2023. 3
+[28] Wenbo Wang, Hsuan-I Ho, Chen Guo, Boxiang Rong, Artur
+     Grigorev, Jie Song, Juan Jose Zarate, and Otmar Hilliges.
+     4d-dress: A 4d dataset of real-world human clothing with
+     semantic annotations, 2024. 2
+[29] L Wolsey. Integer programming. In IEE Transactions 32,
+     pages 273–285. 2000. 4
+[30] Andrei Zanfir and Cristian Sminchisescu. Deep learning of
+     graph matching. In Proceedings of the IEEE Conference on
+     Computer Vision and Pattern Recognition (CVPR), 2018. 3
+[31] Yi Zhou, Connelly Barnes, Jingwan Lu, Jimei Yang, and Hao
+     Li. On the continuity of rotation representations in neural
+     networks, 2020. 3
+   AutoSew: A Geometric Approach to Stitching Prediction with Graph Neural
+                                Networks
+                         Supplementary Material
+
+
+
+
+   In this Supplementary Material, we provide additional               segment. Quadratic or cubic Bézier edges are concate-
+details to support the main contributions of the paper. These          nated by joining control points to form a B-spline, pre-
+materials are intended to enhance reproducibility and offer            serving curvature continuity. After merging, all original
+a deeper understanding of key design choices:                          one-to-one annotations along the collapsed or concate-
+                                                                       nated edges are reassigned to the new unified edge. This
+A. Details of Geometric Edge Features                                  ensures that every multi-edge relationship is mapped.
+B. Details of Curated Dataset Extension                            We apply the mirroring on its vertical axis, fusion, and
+C. Sinkhorn Algorithm                                              stitch-update steps to each sleeve cuff and then merge the
+                                                                   front and back upper body panels into unified pieces, keep-
+                                                                   ing all original stitch annotations.
+A. Details of Geometric Edge Features                                  This pipeline produces 18 003 patterns with merged
+Each garment is represented by a set of disconnected 2D            sleeves and sleeve cuffs, and unified torsos. This increases
+panels. A panel is a closed polygon defined by N edges,            realism and structural complexity. The resulting dataset
+E = {ej }N   j=1 , where each edge may be a straight seg-
+                                                                   provides a stronger benchmark for training and evaluating
+ment, circular arc, quadratic Bézier spline, or a cubic Bézier   multi-edge stitch-prediction models.
+spline. Additionally, we introduce B-splines to represent
+edges created during panel merge (e.g., in sleeve recon-           C. Sinkhorn Algorithm
+struction). These are formed by concatenating two Bézier
+                                                                   We adopt the entropic optimal transport (OT) framework
+splines using their control points and midpoint, allowing the
+                                                                   [2], solved efficiently via the Sinkhorn algorithm [1, 3].
+modeling of more complex edge shapes.
+                                                                   This approach introduces an entropy term to the standard
+    To capture the geometric and structural variability of
+                                                                   OT cost, resulting in a smooth and differentiable objective.
+these edges, we extract 22 raw features per edge. These
+                                                                   This regularization is crucial for stable and efficient com-
+include both local shape descriptors and topological prop-
+                                                                   putation of transport plans, which we utilize for AutoSew.
+erties. A complete list of these features, along with their
+                                                                   Formally, the objective is:
+definitions, is provided in Table 1. Finally, these features
+are preprocessed into a 24-dimensional edge vector.                          OTε (a, b) =     min ⟨C, P⟩ − εH(P).            (1)
+                                                                                            P∈U (a,b)
+B. Detailed M-E.G ARMENT C ODE DATA
+                                                                   where H(P) represents the entropy of the assignment ma-
+We start by selecting every pattern in G ARMENT C ODE -            trix P, and ϵ > 0 regulates the strength of the entropy-based
+DATA . V 2 that contains at least one sleeve. The extension        smoothing, and U (a, b) is the set of feasible transport plans
+pipeline then proceeds in three short stages:                      with given marginals a and b. In our case, a = b ∈ RM are
+1. Panel mirroring: The back-sleeve panel is reflected on          uniform distributions over the M panel edges.
+   its horizontal axis.                                                The Sinkhorn algorithm efficiently computes a doubly
+2. Geometric merging: The mirrored back sleeve is com-             stochastic approximation to the optimal transport plan via
+   pared with the front sleeve; if the length of the edge and      iterative row and column normalization. The entropic regu-
+   curvature match, both halves are merged into a single           larization introduced by this method provides crucial differ-
+   sleeve panel.                                                   entiability, ensuring that small perturbations in the cost ma-
+3. Edge collapsing: Adjacent edges are merged, and                 trix or marginals result in predictable gradient updates. This
+   their stitch labels are mapped to multi-edge annotations.       property is essential for end-to-end training of our network.
+   Straight and coplanar edges are collapsed into one longer       By utilizing a Sinkhorn-based layer, we leverage gradient-
+      Geometric Features         Feature                                    Description
+                                 Start vertex (x0 , y0 )                    Coordinates of the edge’s starting point
+                                 End vertex (x1 , y1 )                      Coordinates of the edge’s ending point
+                                 Length l                                   Euclidean distance between start and end
+                                 Orientation (ox , oy )                     Unit vector between the initial and end edge point
+      Local Shape                Curvature type kt                          {0 . . . 5}: straight segment, circular arcs quadratic Bézier,
+                                                                            cubic Bézier and B-Splines
+                                 Curvature params k = (k1 , . . . , k10 )   All zeros for straight segment
+                                                                            (r, d, θ, 0, . . . , 0) for circular arc
+                                                                            (qx1 , qy1 , 0, . . . , 0) for quadratic Bézier
+                                                                            (qx1 , qy1 , qx2 , qy2 , 0, . . . , 0) for cubic Bézier
+                                                                            (qx1 , qy1 , qx2 , qy2 , cx , cy , qx3 , qy3 , qx4 , qy4 ) for B-splines
+                                 Interior angle left αl                     Interior angle with left neighbor edge (radians)
+                                 Interior angle right αr                    Interior angle with right neighbor edge (radians)
+      Topological Properties
+                                 Edge count N                               Total number of edges in panel
+                                 Panel ID u                                 Unique identifier for this panel
+
+                    Table 1. Geometric edge features composed of Local Shape descriptor and Topological properties.
+
+
+based optimization for partial matching, effectively bypass-
+ing the challenges posed by non-differentiable combinato-
+rial solvers.
+
+References
+[1] Marvin Eisenberger, Aysim Toker, Laura Leal-Taixé, Florian
+    Bernard, and Daniel Cremers. A unified framework for im-
+    plicit sinkhorn differentiation. In 2022 IEEE/CVF Conference
+    on Computer Vision and Pattern Recognition (CVPR), pages
+    499–508, 2022. 1
+[2] Gabriel Peyré and Marco Cuturi. Computational optimal
+    transport, 2020. 1
+[3] Richard Sinkhorn and Paul Knopp. Concerning nonnegative
+    matrices and doubly stochastic matrices. Pacific Journal of
+    Mathematics, 21(2):343–348, 1967. 1
+

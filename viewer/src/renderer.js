@@ -26,13 +26,14 @@ const STROKE = '#334155';
 const GRAIN_COLOR = '#94a3b8';
 const LABEL_COLOR = '#1e293b';
 const DIM_COLOR = '#64748b';
+const SEAM_COLORS = ['#ef4444', '#06b6d4', '#84cc16', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 /**
  * Render flat pattern pieces as SVG.
  * @param {Program} ast
  * @returns {string}
  */
-export function render(ast) {
+export function render(ast, opts = {}) {
   if (!ast.blocks || ast.blocks.length === 0) return emptySvg();
   const block = resolveMain(ast);
   const resolved = resolveComponents(block, ast);
@@ -44,6 +45,11 @@ export function render(ast) {
   const edges = extractEdges(resolved);
   const liningPanels = extractLiningPanels(resolved);
   const allPanels = [...panels, ...liningPanels];
+
+  // Seam annotations (for visualization in pieces view)
+  const seamPairs = extractSeams(resolved);
+  const seamIndex = buildSeamIndex(seamPairs);
+  annotatePanelSeams(allPanels, seamIndex);
 
   // Apply darts to panels
   for (const d of darts) {
@@ -70,7 +76,11 @@ export function render(ast) {
 
   svg += `<g transform="translate(${MARGIN}, ${MARGIN + 24})">`;
   for (const p of positioned.panels) {
-    svg += renderPanel(p);
+    svg += renderPanel(p, { showSeams: !!opts.showSeams });
+  }
+  // Cross-panel seam connectors
+  if (opts.showSeams && seamPairs.length > 0) {
+    svg += seamConnectors(positioned.panels, seamPairs);
   }
   svg += '</g>';
 
@@ -79,7 +89,9 @@ export function render(ast) {
   const fabricStr = block.fabric ? summarizeFabric(block.fabric) : '';
   const edgeInfo = edges.length ? ` · ${edges.length} edge${edges.length !== 1 ? 's' : ''}` : '';
   const layerInfo = liningPanels.length ? ` · lining (${liningPanels.length} panels)` : '';
-  const info = `${panels.length} panel${panels.length !== 1 ? 's' : ''}${openings.length ? ` · ${openings.length} opening${openings.length !== 1 ? 's' : ''}` : ''}${block.build.length ? ` · ${block.build.length} build step${block.build.length !== 1 ? 's' : ''}` : ''}${edgeInfo}${layerInfo}${fabricStr ? ` · ${fabricStr}` : ''}`;
+  const seamCount = seamPairs.length;
+  const seamInfo = opts.showSeams && seamCount > 0 ? ` · ${seamCount} seam${seamCount !== 1 ? 's' : ''}` : '';
+  const info = `${panels.length} panel${panels.length !== 1 ? 's' : ''}${openings.length ? ` · ${openings.length} opening${openings.length !== 1 ? 's' : ''}` : ''}${block.build.length ? ` · ${block.build.length} build step${block.build.length !== 1 ? 's' : ''}` : ''}${edgeInfo}${layerInfo}${seamInfo}${fabricStr ? ` · ${fabricStr}` : ''}`;
   svg += `<text x="${totalW / 2}" y="${infoY}" text-anchor="middle" fill="${DIM_COLOR}" font-size="11" font-family="system-ui">${info}</text>`;
 
   svg += '</svg>';
@@ -235,6 +247,77 @@ function extractOpenings(block) {
   return openings;
 }
 
+// --- Seams (from BUILD S(...)) ---
+
+function extractSeams(block) {
+  /** @type {{id:number, a:string, b:string, type:string}[]} */
+  const pairs = [];
+  let sid = 1;
+  for (const step of block.build) {
+    const op = step.operation;
+    if (!op || op.type !== 'call' || op.name !== 'S') continue;
+    const args = op.args || [];
+    if (args.length < 2) continue;
+    const type = (args[2]?.type === 'reference') ? args[2].value : 'plain';
+    const listA = expandEdgeRefList(args[0]);
+    const listB = expandEdgeRefList(args[1]);
+    if (listA.length === 0 || listB.length === 0) continue;
+    if (listA.length > 1 && listB.length > 1 && listA.length === listB.length) {
+      for (let i = 0; i < listA.length; i++) pairs.push({ id: sid, a: listA[i], b: listB[i], type });
+    } else if (listA.length > 1 && listB.length === 1) {
+      for (const a of listA) pairs.push({ id: sid, a, b: listB[0], type });
+    } else if (listB.length > 1 && listA.length === 1) {
+      for (const b of listB) pairs.push({ id: sid, a: listA[0], b, type });
+    } else {
+      pairs.push({ id: sid, a: listA[0], b: listB[0], type });
+    }
+    sid++;
+  }
+  return pairs;
+}
+
+function expandEdgeRefList(expr) {
+  if (!expr) return [];
+  if (expr.type === 'set' && Array.isArray(expr.elements)) {
+    return expr.elements.map(e => resolveRef(e)).filter(Boolean);
+  }
+  const s = resolveRef(expr);
+  return s ? [s] : [];
+}
+
+function buildSeamIndex(pairs) {
+  /** @type {Record<string, { id:number, type:string, edge:string, partner:string, color:string }[]>} */
+  const index = {};
+  for (const p of pairs) {
+    const color = SEAM_COLORS[(p.id - 1) % SEAM_COLORS.length];
+    const [pa, ea] = splitPanelEdge(p.a);
+    const [pb, eb] = splitPanelEdge(p.b);
+    if (pa) {
+      index[pa] ||= [];
+      index[pa].push({ id: p.id, type: p.type, edge: ea, partner: pb + '.' + eb, color });
+    }
+    if (pb) {
+      index[pb] ||= [];
+      index[pb].push({ id: p.id, type: p.type, edge: eb, partner: pa + '.' + ea, color });
+    }
+  }
+  return index;
+}
+
+function annotatePanelSeams(panels, seamIndex) {
+  for (const panel of panels) {
+    const list = seamIndex[panel.name];
+    if (list && list.length) panel.seams = list;
+  }
+}
+
+function splitPanelEdge(ref) {
+  if (!ref) return ['', ''];
+  const i = ref.indexOf('.');
+  if (i === -1) return [ref, ''];
+  return [ref.slice(0, i), ref.slice(i + 1)];
+}
+
 /** @param {Expr | undefined} expr @returns {RegionDims} */
 function resolveRegionDims(expr) {
   if (!expr) return { widthTop: 30, widthBottom: 30, height: 30 };
@@ -334,7 +417,7 @@ const LINING_COLOR = '#e8e0f0';
 const LINING_STROKE = '#8b7fa8';
 const EDGE_CURVE_COLOR = '#e11d48';
 
-function renderPanel(p) {
+function renderPanel(p, opts = {}) {
   const w = p.w, h = p.h;
   const isLining = p.isLining;
   const fill = isLining ? LINING_COLOR : (COLORS[p.name] || DEFAULT_COLOR);
@@ -369,6 +452,13 @@ function renderPanel(p) {
 
   // Grain line
   g += grainLine(w, h, p.grain);
+
+  // Seams (optional overlay)
+  if (opts.showSeams && p.seams && p.seams.length > 0) {
+    for (const s of p.seams) {
+      g += seamOverlay(w, h, s);
+    }
+  }
 
   // Darts
   for (const d of p.darts) {
@@ -470,6 +560,105 @@ function legPath(w, h) {
 
 function pathEl(d, fill, stroke) {
   return `<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/>`;
+}
+
+// ---- Seams overlay utilities ----
+
+function seamOverlay(w, h, seam) {
+  const side = edgeNameToSide(seam.edge);
+  const inset = 3;
+  let x1, y1, x2, y2, lx, ly;
+  switch (side) {
+    case 'top':
+      x1 = inset; y1 = inset; x2 = w - inset; y2 = inset; lx = w / 2; ly = inset - 6; break;
+    case 'bottom':
+      x1 = inset; y1 = h - inset; x2 = w - inset; y2 = h - inset; lx = w / 2; ly = h - inset + 10; break;
+    case 'left':
+      x1 = inset; y1 = inset; x2 = inset; y2 = h - inset; lx = inset - 8; ly = h / 2; break;
+    case 'right':
+      x1 = w - inset; y1 = inset; x2 = w - inset; y2 = h - inset; lx = w - inset + 8; ly = h / 2; break;
+    default:
+      x1 = inset; y1 = inset; x2 = w - inset; y2 = inset; lx = w / 2; ly = inset - 6; break;
+  }
+  const stroke = seam.color || '#ef4444';
+  const style = seamStrokeStyle(seam.type);
+  let o = '';
+  o += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="1.3" ${style}/>`;
+  o += `<circle cx="${lx}" cy="${ly}" r="6" fill="#ffffff" stroke="${stroke}" stroke-width="1"/>`;
+  o += `<text x="${lx}" y="${ly + 2}" text-anchor="middle" fill="${stroke}" font-size="8" font-family="system-ui" font-weight="700">${seam.id}</text>`;
+  return o;
+}
+
+function seamStrokeStyle(t) {
+  switch (t) {
+    case 'plain': return 'stroke-dasharray="5,3"';
+    case 'french': return 'stroke-dasharray="2,2"';
+    case 'felled': return 'stroke-dasharray="8,3"';
+    case 'lapped': return 'stroke-dasharray="6,2,2,2"';
+    case 'bound': return '';
+    case 'serged': return 'stroke-dasharray="1,2"';
+    default: return 'stroke-dasharray="5,3"';
+  }
+}
+
+function edgeNameToSide(name) {
+  const n = String(name || '');
+  if (n.includes('shoulder') || n === 'top' || n === 'cap') return 'top';
+  if (n.includes('bottom') || n.includes('hem') || n === 'cuff_edge') return 'bottom';
+  if (n === 'side' || n === 'side.L' || n === 'front' || n === 'under') return 'left';
+  if (n === 'side.R' || n === 'back' || n === 'armhole') return 'right';
+  return 'top';
+}
+
+// Draw curved connectors between panels for each seam pair
+function seamConnectors(items, seamPairs) {
+  /** @type {Record<string, any>} */
+  const byName = {};
+  for (const it of items) byName[it.name] = it;
+  const drawn = new Set();
+  let s = '';
+  for (const pair of seamPairs) {
+    const key = pair.a < pair.b ? pair.a + '|' + pair.b : pair.b + '|' + pair.a;
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+    const color = SEAM_COLORS[(pair.id - 1) % SEAM_COLORS.length];
+    const [pa, ea] = splitPanelEdge(pair.a);
+    const [pb, eb] = splitPanelEdge(pair.b);
+    const A = byName[pa];
+    const B = byName[pb];
+    if (!A || !B) continue;
+    const sideA = edgeNameToSide(ea);
+    const sideB = edgeNameToSide(eb);
+    const p1 = anchorForSide(A, sideA);
+    const p2 = anchorForSide(B, sideB);
+    const c1 = controlForSide(p1, sideA);
+    const c2 = controlForSide(p2, sideB);
+    const style = seamStrokeStyle(pair.type);
+    s += `<path d="M ${p1.x},${p1.y} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}" fill="none" stroke="${color}" stroke-width="1.2" ${style} opacity="0.7"/>`;
+  }
+  return s;
+}
+
+function anchorForSide(item, side) {
+  const inset = 6;
+  switch (side) {
+    case 'top': return { x: item.x + item.w / 2, y: item.y + inset };
+    case 'bottom': return { x: item.x + item.w / 2, y: item.y + item.h - inset };
+    case 'left': return { x: item.x + inset, y: item.y + item.h / 2 };
+    case 'right': return { x: item.x + item.w - inset, y: item.y + item.h / 2 };
+    default: return { x: item.x + item.w / 2, y: item.y + inset };
+  }
+}
+
+function controlForSide(p, side) {
+  const k = 40;
+  switch (side) {
+    case 'top': return { x: p.x, y: p.y - k };
+    case 'bottom': return { x: p.x, y: p.y + k };
+    case 'left': return { x: p.x - k, y: p.y };
+    case 'right': return { x: p.x + k, y: p.y };
+    default: return { x: p.x, y: p.y - k };
+  }
 }
 
 function grainLine(w, h, grain) {
