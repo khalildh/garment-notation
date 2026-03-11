@@ -30,6 +30,7 @@ const viewer = document.getElementById('viewer');
 const viewer3d = document.getElementById('viewer-3d');
 const status = document.getElementById('status');
 const viewBtns = document.querySelectorAll('.view-btn[data-view]');
+const seamsToggleBtn = document.getElementById('seams-toggle');
 
 let currentView = 'assembled';
 let bodyOverlayOn = false;
@@ -37,6 +38,7 @@ let bodyOverlayMode = 'silhouette'; // 'silhouette' | 'regions'
 let activeJsonSource = null; // raw JSON string when a Korosteleva template is active
 let activeGnlSource = null;  // converted GNL string (saved when switching to JSON view)
 let currentSrcMode = 'gnl';  // 'gnl' or 'json'
+let showSeams = false;       // pieces view seam overlays
 
 // Body overlay controls
 const bodyToggleBtn = document.getElementById('body-toggle');
@@ -108,6 +110,7 @@ function updateOverlayVisibility() {
   const show = currentView === 'assembled';
   if (bodyToggleBtn) bodyToggleBtn.style.display = show ? '' : 'none';
   if (bodyModeToggle) bodyModeToggle.style.display = (show && bodyOverlayOn) ? '' : 'none';
+  if (seamsToggleBtn) seamsToggleBtn.style.display = currentView === 'pieces' ? '' : 'none';
 }
 
 function updateViewContainers() {
@@ -136,7 +139,7 @@ function update() {
       });
     } else {
       const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
-      const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast);
+      const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast, { showSeams });
       viewer.innerHTML = svg;
     }
 
@@ -222,15 +225,8 @@ const examples = document.getElementById('examples');
 if (examples) {
   examples.addEventListener('change', () => {
     const val = examples.value;
-    if (val && EXAMPLES[val]) {
-      hideSourceToggle();
-      editor.value = EXAMPLES[val];
-      update();
-    } else if (val && KOROSTELEVA_TEMPLATES[val]) {
-      const tpl = KOROSTELEVA_TEMPLATES[val];
-      loadKorostelevaTemplate(tpl);
-    }
-    examples.value = '';
+    if (!val) return;
+    loadExample(val, { push: true });
   });
 }
 
@@ -531,3 +527,57 @@ GARMENT blazer [SYM] {
     >> ATTACH_LAYER(lining)
 }`,
 };
+
+// --- Routing: query param ?example=key ---
+
+function setExampleInUrl(key, { replace = false } = {}) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('example', key);
+  if (replace) {
+    history.replaceState(null, '', url);
+  } else {
+    history.pushState(null, '', url);
+  }
+}
+
+async function loadExample(key, { push = false } = {}) {
+  if (EXAMPLES[key]) {
+    hideSourceToggle();
+    editor.value = EXAMPLES[key];
+    examples && (examples.value = key);
+    if (push) setExampleInUrl(key);
+    update();
+    return;
+  }
+  if (KOROSTELEVA_TEMPLATES[key]) {
+    const tpl = KOROSTELEVA_TEMPLATES[key];
+    await loadKorostelevaTemplate(tpl);
+    examples && (examples.value = key);
+    if (push) setExampleInUrl(key);
+    return;
+  }
+}
+
+// Initial load from ?example=...
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  const initial = params.get('example');
+  if (initial && (EXAMPLES[initial] || KOROSTELEVA_TEMPLATES[initial])) {
+    loadExample(initial, { push: false });
+  }
+})();
+
+// Back/forward
+window.addEventListener('popstate', () => {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get('example');
+  if (key) {
+    loadExample(key, { push: false });
+  }
+});
+// Seams toggle (pieces view)
+seamsToggleBtn?.addEventListener('click', () => {
+  showSeams = !showSeams;
+  seamsToggleBtn.classList.toggle('active', showSeams);
+  if (currentView === 'pieces') update();
+});
