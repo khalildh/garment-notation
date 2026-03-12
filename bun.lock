@@ -1,0 +1,22 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "peggy": "^4",
+      },
+    },
+  },
+  "packages": {
+    "@peggyjs/from-mem": ["@peggyjs/from-mem@1.3.5", "", { "dependencies": { "semver": "7.6.3" } }, "sha512-oRyzXE7nirAn+5yYjCdWQHg3EG2XXcYRoYNOK8Quqnmm+9FyK/2YWVunwudlYl++M3xY+gIAdf0vAYS+p0nKfQ=="],
+
+    "commander": ["commander@12.1.0", "", {}, "sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA=="],
+
+    "peggy": ["peggy@4.2.0", "", { "dependencies": { "@peggyjs/from-mem": "1.3.5", "commander": "^12.1.0", "source-map-generator": "0.8.0" }, "bin": "bin/peggy.js" }, "sha512-ZjzyJYY8NqW8JOZr2PbS/J0UH/hnfGALxSDsBUVQg5Y/I+ZaPuGeBJ7EclUX2RvWjhlsi4pnuL1C/K/3u+cDeg=="],
+
+    "semver": ["semver@7.6.3", "", { "bin": "bin/semver.js" }, "sha512-oVekP1cKtI+CTDvHWYFUcMtsK/00wmAEfyqKfNdARm8u1wNVhSgaX7A8d4UuIlUI5e84iEwOhs7ZPYRmzU9U6A=="],
+
+    "source-map-generator": ["source-map-generator@0.8.0", "", {}, "sha512-psgxdGMwl5MZM9S3FWee4EgsEaIjahYV5AzGnwUvPhWeITz/j6rKpysQHlQ4USdxvINlb8lKfWGIXwfkrgtqkA=="],
+  }
+}
