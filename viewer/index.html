@@ -64,6 +64,7 @@ body {
   display: flex;
   flex-direction: column;
   border-right: 1px solid #334155;
+  background: #0f172a;
 }
 
 .pane-label {
@@ -75,6 +76,28 @@ body {
   letter-spacing: 0.08em;
   background: #1e293b;
   border-bottom: 1px solid #1e293b;
+}
+
+.editor-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+#line-numbers {
+  width: 48px;
+  padding: 16px 8px 16px 0;
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: right;
+  color: #475569;
+  background: #0f172a;
+  user-select: none;
+  border-right: 1px solid #1e293b;
+  overflow: hidden;
+  white-space: pre;
 }
 
 textarea {
@@ -89,6 +112,8 @@ textarea {
   tab-size: 2;
   background: #0f172a;
   color: #e2e8f0;
+  overflow-y: auto;
+  white-space: pre;
 }
 
 textarea::selection {
@@ -273,7 +298,10 @@ textarea::selection {
           <button class="src-btn" data-src="json">JSON</button>
         </div>
       </div>
-      <textarea id="editor" spellcheck="false"></textarea>
+      <div class="editor-container">
+        <div id="line-numbers"></div>
+        <textarea id="editor" spellcheck="false"></textarea>
+      </div>
     </div>
     <div class="viewer-pane">
       <div class="pane-label" style="display:flex; align-items:center; justify-content:space-between;">

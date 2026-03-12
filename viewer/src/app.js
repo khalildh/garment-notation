@@ -25,7 +25,20 @@ function parse(source) {
 }
 
 const editor = document.getElementById('editor');
+const lineNumbers = document.getElementById('line-numbers');
 const sourceToggle = document.getElementById('source-toggle');
+
+function updateLineNumbers() {
+  if (!lineNumbers || !editor) return;
+  const lines = editor.value.split('\n').length;
+  lineNumbers.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  lineNumbers.scrollTop = editor.scrollTop;
+}
+
+editor.addEventListener('scroll', () => {
+  lineNumbers.scrollTop = editor.scrollTop;
+});
+
 const srcBtns = document.querySelectorAll('.src-btn');
 const viewer = document.getElementById('viewer');
 const viewer3d = document.getElementById('viewer-3d');
@@ -68,6 +81,7 @@ bodyModeBtns.forEach(btn => {
 
 let debounceTimer;
 editor.addEventListener('input', () => {
+  updateLineNumbers();
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(update, 250);
 });
@@ -98,6 +112,7 @@ function updateViewContainers() {
 }
 
 function update() {
+  updateLineNumbers();
   const source = (currentSrcMode === 'json' && activeGnlSource) ? activeGnlSource : editor.value;
   if (!source.trim()) {
     viewer.innerHTML = '';
@@ -161,6 +176,7 @@ srcBtns.forEach(btn => {
       editor.readOnly = false;
       editor.style.color = '';
     }
+    updateLineNumbers();
   });
 });
 
