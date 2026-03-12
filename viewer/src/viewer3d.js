@@ -24,6 +24,19 @@ let collisionSpheres = [];
 let panelMeshes = [];
 let isDisposed = false;
 
+// Interaction (drag) state
+let raycaster = null;
+let pointer = null;
+let dragState = {
+  active: false,
+  mesh: null,
+  cloth: null,
+  particle: -1,
+  plane: null,
+  target: null,
+  handlersAttached: false,
+};
+
 const GRAVITY = 980; // cm/s^2
 const DT = 1 / 60;
 const CONSTRAINT_ITERATIONS = 16;
@@ -82,6 +95,12 @@ export async function create3DView(container, ast) {
   controls.dampingFactor = 0.08;
   controls.update();
 
+  // Interaction helpers
+  raycaster = new THREE.Raycaster();
+  pointer = new THREE.Vector2();
+  dragState.plane = new THREE.Plane();
+  dragState.target = new THREE.Vector3();
+
   // Lights
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);
@@ -107,6 +126,9 @@ export async function create3DView(container, ast) {
 
   // Build garment
   rebuildGarment(ast);
+
+  // Input handlers (once per renderer lifecycle)
+  attachInputHandlers(renderer.domElement);
 
   // Resize handler
   const onResize = () => {
@@ -173,6 +195,98 @@ function rebuildGarment(ast) {
   }
 }
 
+function attachInputHandlers(domEl) {
+  if (dragState.handlersAttached) return;
+
+  const getPointerNDC = (event) => {
+    const rect = domEl.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    pointer.set(x, y);
+  };
+
+  const pickCloth = (event) => {
+    getPointerNDC(event);
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(panelMeshes, false);
+    return hits && hits[0];
+  };
+
+  const onMouseDown = (e) => {
+    if (!scene || !camera) return;
+    const hit = pickCloth(e);
+    if (!hit) return;
+
+    const mesh = hit.object;
+    const panel = mesh._clothPanel;
+    if (!panel || !panel.cloth) return;
+
+    // Find nearest vertex among the face's three vertices
+    const face = hit.face; // { a, b, c }
+    const posAttr = mesh.geometry.attributes.position;
+    const candidates = face ? [face.a, face.b, face.c] : [hit.faceIndex];
+    let best = -1, bestD2 = Infinity;
+    for (const vi of candidates) {
+      const vx = posAttr.getX(vi), vy = posAttr.getY(vi), vz = posAttr.getZ(vi);
+      const dx = vx - hit.point.x, dy = vy - hit.point.y, dz = vz - hit.point.z;
+      const d2 = dx*dx + dy*dy + dz*dz;
+      if (d2 < bestD2) { bestD2 = d2; best = vi; }
+    }
+    if (best < 0) return;
+
+    dragState.active = true;
+    dragState.mesh = mesh;
+    dragState.cloth = panel.cloth;
+    dragState.particle = best; // geometry index equals cloth particle index
+
+    // Plane for dragging: camera-facing plane through the hit point
+    const normal = new THREE.Vector3();
+    camera.getWorldDirection(normal);
+    dragState.plane.setFromNormalAndCoplanarPoint(normal, hit.point.clone());
+
+    // Seed target at the hit point
+    dragState.target.copy(hit.point);
+
+    // Temporarily pin the particle so solver treats it as fixed
+    pinDragParticle(true);
+
+    // Disable orbit controls while dragging
+    controls && (controls.enabled = false);
+  };
+
+  const onMouseMove = (e) => {
+    if (!dragState.active) return;
+    getPointerNDC(e);
+    raycaster.setFromCamera(pointer, camera);
+    const p = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dragState.plane, p);
+    if (p) dragState.target.copy(p);
+  };
+
+  const endDrag = () => {
+    if (!dragState.active) return;
+    pinDragParticle(false);
+    dragState.active = false;
+    dragState.mesh = null;
+    dragState.cloth = null;
+    dragState.particle = -1;
+    controls && (controls.enabled = true);
+  };
+
+  domEl.addEventListener('mousedown', onMouseDown);
+  domEl.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', endDrag);
+  domEl.addEventListener('mouseleave', endDrag);
+
+  dragState.handlersAttached = true;
+}
+
+function pinDragParticle(flag) {
+  const cloth = dragState.cloth;
+  if (!cloth || dragState.particle < 0) return;
+  cloth.pinned[dragState.particle] = flag ? 1 : 0;
+}
+
 /**
  * Copy cloth particle positions into Three.js geometry vertices.
  */
@@ -205,6 +319,19 @@ function startAnimation() {
     // Physics step
     for (const panel of currentPanels) {
       applyGravity(panel.cloth, GRAVITY, DT);
+      // If dragging this panel, drive the selected particle to the target
+      if (dragState.active && dragState.cloth === panel.cloth && dragState.particle >= 0) {
+        const i3 = dragState.particle * 3;
+        const pos = panel.cloth.positions;
+        const prev = panel.cloth.prevPositions;
+        pos[i3] = dragState.target.x;
+        pos[i3 + 1] = dragState.target.y;
+        pos[i3 + 2] = dragState.target.z;
+        // Match prev to avoid artificial velocity bursts
+        prev[i3] = pos[i3];
+        prev[i3 + 1] = pos[i3 + 1];
+        prev[i3 + 2] = pos[i3 + 2];
+      }
       simulate(panel.cloth, DT, CONSTRAINT_ITERATIONS);
       collideWithSpheres(panel.cloth, collisionSpheres);
     }
