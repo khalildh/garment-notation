@@ -1,0 +1,18 @@
+COMPONENT notched_lapel {
+
+  FABRIC: M(280gsm, crisp, none, 1.0, woven.twill)
+  INTERLINING: M(80gsm, stiff, none, 1.0, nonwoven)
+
+  collar_stand = P(%neck, rect, 1.0)
+  collar_fall  = P(%neck, contour, 1.0)
+  lapel        = P(%torso.front[0..0.15], contour, 1.0)
+
+  BUILD:
+    FUSE(collar_stand, INTERLINING)
+    >> FUSE(collar_fall, INTERLINING)
+    >> FUSE(lapel, INTERLINING)
+    >> S(collar_stand.top, collar_fall.bottom, plain)
+    >> F(collar_fall, gorge_line, out)
+    >> S(collar_stand.ends, lapel.notch, plain)
+    >> F(lapel, break_point, out)
+}

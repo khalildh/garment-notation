@@ -1,0 +1,57 @@
+GARMENT button_shirt [SYM] {
+
+  FABRIC: M(120gsm, crisp, none, 1.0, woven.poplin)
+
+  -- Body panels
+  front = P(%torso.front + %leg[0..0.05], contour, 1.15)
+  back  = P(%torso.back + %leg[0..0.05], contour, 1.12)
+  yoke  = P(%torso.back[0..0.15], rect, 1.0)
+
+  -- Sleeve with placket
+  sleeve = P(%arm[0..0.65], contour, 1.2)
+  cuff   = P(%wrist, rect, 1.0)
+
+  -- Collar
+  collar_stand = P(%neck, rect, 1.0)
+  collar_fall  = P(%neck, contour, 1.05)
+
+  -- Openings
+  front_opening = O(%torso.front, slit, @neck)
+  neck_opening  = O(@neck, circle, body+2cm)
+  hem           = O(@hip, circle, body+12cm)
+  sleeve_vent   = O(%arm[0.55..0.65], slit)
+
+  -- Placket (button stand)
+  placket = P(%torso.front[0..1], rect, 1.0)
+
+  BUILD:
+    -- Back yoke
+    D(back, @shoulder.L, 4, 8cm)
+    >> S(yoke.bottom, back.top, plain)
+
+    -- Shoulders and sides
+    >> S(front.shoulder, yoke.shoulder, plain)
+    >> S(front.side, back.side, plain)
+
+    -- Sleeve
+    >> S(sleeve.cap, {front.armhole, back.armhole}, plain)
+       [G(sleeve.cap, 1.1)]
+    >> S(sleeve.under, sleeve.under, plain)
+
+    -- Cuff
+    >> F(sleeve_vent, 2cm, in)
+    >> G(sleeve.cuff_edge, 1.5)
+    >> S(cuff.top, sleeve.cuff_edge, plain)
+    >> C(cuff, button(1), inner)
+
+    -- Collar
+    >> S(collar_stand.top, collar_fall.bottom, plain)
+    >> S(collar_stand.bottom, neck_opening, plain)
+
+    -- Button placket (7 buttons, center front)
+    >> S(placket.inner, front_opening, plain)
+    >> C(front_opening, button(7), center)
+
+    -- Hem
+    >> F(hem, 2cm, in)
+}

@@ -1,0 +1,25 @@
+GARMENT t_shirt [SYM] {
+
+  FABRIC: M(160gsm, fluid, biaxial:15%, 1.0, knit.jersey)
+
+  -- Define panels
+  front  = P(%torso.front, contour, 1.15)
+  back   = P(%torso.back, contour, 1.15)
+  sleeve = P(%arm[0..0.4], contour, 1.2)
+
+  -- Define openings
+  neck   = O(@neck, circle, body+8cm)
+  hem    = O(@hip, circle, body+10cm)
+  cuff   = O(@elbow, circle, body+4cm)
+
+  -- Build order
+  BUILD:
+    S(front.shoulder, back.shoulder, serged)
+    >> S(sleeve.cap, {front.armhole, back.armhole}, serged)
+       [G(sleeve.cap, 1.08)]
+    >> S(front.side, back.side, serged)
+    >> S(sleeve.under, sleeve.under, serged)
+    >> F(neck, 1.5cm, in)
+    >> F(hem, 2.5cm, in)
+    >> F(cuff, 2cm, in)
+}

@@ -1,0 +1,22 @@
+GARMENT wrap_skirt {
+
+  FABRIC: M(200gsm, crisp, none, 1.0, woven.plain)
+
+  front_L = P(%torso.front.L + %leg.L[0..0.2], trapezoid, 1.1)
+  front_R = P(%torso.front.R + %leg.R[0..0.2], trapezoid, 1.1)
+  back    = P(%torso.back + %leg[0..0.2], trapezoid, 1.1)
+
+  waist     = O(@waist, circle, body+2cm)
+  hem_line  = O(@knee, open)
+
+  waistband = P(%waist, rect, 1.0)
+
+  BUILD:
+    S(front_L.side, back.side.L, plain)
+    >> S(front_R.side, back.side.R, plain)
+    >> F(waistband, 2cm, in)
+    >> S(waistband.inner, {back.top, front_L.top, front_R.top}, plain)
+       [G({front_L.top, front_R.top}, 1.0)]
+    >> C(waist, tie, L_wrap_over_R)
+    >> F(hem_line, 1cm, in)
+}

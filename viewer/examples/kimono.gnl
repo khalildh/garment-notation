@@ -1,0 +1,56 @@
+GARMENT kimono {
+
+  FABRIC: M(medium, crisp, none, 1.0, woven.plain)
+
+  -- Kimono is built entirely from rectangular panels
+  -- Traditional tanmono bolt width (~36cm) dictates panel width
+
+  -- Body panels (shoulder to ankle)
+  back_L   = P(%torso.back.L + %leg.L[0..0.8], rect, 1.0)
+  back_R   = P(%torso.back.R + %leg.R[0..0.8], rect, 1.0)
+  front_L  = P(%torso.front.L + %leg.L[0..0.8], rect, 1.0)
+  front_R  = P(%torso.front.R + %leg.R[0..0.8], rect, 1.0)
+
+  -- Okumi (overlap facing panels, narrower, added to front inner edges)
+  okumi_L  = P(%torso.front.L[0..0.3] + %leg.L[0..0.8], rect, 1.0)
+  okumi_R  = P(%torso.front.R[0..0.3] + %leg.R[0..0.8], rect, 1.0)
+
+  -- Sode (sleeves) — deep rectangles, folded at shoulder line
+  sleeve   = P(%arm[0..0.5], rect, 1.4)
+
+  -- Eri (collar) — long narrow strip, runs back neck down both fronts
+  collar   = P(%neck, rect(width=5.5cm, length=140cm), 1.0)
+
+  -- Openings
+  neck        = O(@neck, V, depth=20cm)
+  hem         = O(@ankle, open)
+  front_open  = O(%torso.front, slit, @neck..@ankle)
+  -- Sleeve openings: wrist end is open, bottom edge (furi) hangs free
+  cuff        = O(@elbow, open)
+
+  BUILD:
+    -- Center back seam
+    S(back_L.center, back_R.center, plain)
+    -- Shoulder seams
+    >> S(front_L.shoulder, back_L.shoulder, plain)
+    >> S(front_R.shoulder, back_R.shoulder, plain)
+    -- Attach okumi to inner front edges
+    >> S(okumi_L.outer, front_L.center, plain)
+    >> S(okumi_R.outer, front_R.center, plain)
+    -- Sleeve attachment (at shoulder area only — partial, leaving miyatsukuchi gap)
+    >> S(sleeve.cap, {front.armhole, back.armhole}, plain)
+    -- Fold sleeve at shoulder, close outer and bottom edges (leaving cuff open)
+    >> F(sleeve, shoulder_line, over)
+    >> S(sleeve.front, sleeve.back, plain)
+    -- Side seams (below miyatsukuchi to hem)
+    >> S(front_L.side, back_L.side, plain)
+    >> S(front_R.side, back_R.side, plain)
+    -- Collar: fold doubled, attach along neckline and front edges
+    >> F(collar, 2.75cm, in)
+    >> S(collar.inner, {back.neckline, okumi_L.neckline, okumi_R.neckline}, plain)
+    -- Hems
+    >> F(hem, 3cm, in)
+    -- Closure: left front wraps over right, secured with ties + obi
+    >> C(front_open, wrap, L_over_R)
+    >> C(front_open, tie, @waist)
+}
