@@ -40,6 +40,8 @@ let activeJsonSource = null; // raw JSON string when a Korosteleva template is a
 let activeGnlSource = null;  // converted GNL string (saved when switching to JSON view)
 let currentSrcMode = 'gnl';  // 'gnl' or 'json'
 let showSeams = false;       // pieces view seam overlays
+let selectedSeamId = null;   // currently highlighted seam id (pieces view)
+let seamRootHandlerInstalled = false;
 
 // Body overlay controls
 const bodyToggleBtn = document.getElementById('body-toggle');
@@ -116,6 +118,12 @@ function update() {
       const overlayOpts = { overlay: { on: bodyOverlayOn, mode: bodyOverlayMode } };
       const svg = currentView === 'assembled' ? assemble(ast, overlayOpts) : render(ast, { showSeams });
       viewer.innerHTML = svg;
+
+      // Wire seam interactivity for Pieces view when seam overlays are on
+      if (currentView === 'pieces' && showSeams) {
+        installSeamRootHandler();
+        wireSeamElements();
+      }
     }
 
     const mainBlock = ast.blocks.find(b => b.type === 'garment') || ast.blocks[0];
@@ -264,5 +272,55 @@ window.addEventListener('popstate', () => {
 seamsToggleBtn?.addEventListener('click', () => {
   showSeams = !showSeams;
   seamsToggleBtn.classList.toggle('active', showSeams);
+  if (!showSeams) selectedSeamId = null;
   if (currentView === 'pieces') update();
 });
+
+// ---- Seam interactivity (Pieces view) ----
+function installSeamRootHandler() {
+  if (seamRootHandlerInstalled) return;
+  viewer.addEventListener('click', (e) => {
+    // Click outside a seam element clears selection
+    const seamEl = e.target.closest?.('.seam-overlay, .seam-connector');
+    if (!seamEl) {
+      if (selectedSeamId !== null) {
+        selectedSeamId = null;
+        applySeamSelection();
+      }
+    }
+  });
+  seamRootHandlerInstalled = true;
+}
+
+function wireSeamElements() {
+  const seams = viewer.querySelectorAll('.seam-overlay, .seam-connector');
+  seams.forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const id = parseInt(el.getAttribute('data-seam-id') || '');
+      if (!isNaN(id)) {
+        selectedSeamId = id;
+        applySeamSelection();
+      }
+    });
+  });
+  applySeamSelection();
+}
+
+function applySeamSelection() {
+  const seams = viewer.querySelectorAll('.seam-overlay, .seam-connector');
+  seams.forEach(el => {
+    const id = parseInt(el.getAttribute('data-seam-id') || '');
+    if (selectedSeamId == null || id === selectedSeamId) {
+      el.style.opacity = '';
+      if (el.classList.contains('seam-connector')) {
+        el.style.strokeWidth = '';
+      }
+    } else {
+      el.style.opacity = '0.18';
+      if (el.classList.contains('seam-connector')) {
+        el.style.strokeWidth = '1';
+      }
+    }
+  });
+}

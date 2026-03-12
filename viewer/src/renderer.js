@@ -582,10 +582,21 @@ function seamOverlay(w, h, seam) {
   }
   const stroke = seam.color || '#ef4444';
   const style = seamStrokeStyle(seam.type);
-  let o = '';
+
+  // Nudge badge positions so multiple seams on the same side don't perfectly overlap.
+  // Use seam.id parity and a small spread.
+  const spread = 10;
+  const dir = (seam.id % 2 === 0) ? 1 : -1;
+  if (side === 'top' || side === 'bottom') {
+    lx += dir * spread;
+  } else if (side === 'left' || side === 'right') {
+    ly += dir * spread;
+  }
+  let o = `<g class="seam-overlay" data-seam-id="${seam.id}" style="cursor:pointer">`;
   o += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="1.3" ${style}/>`;
   o += `<circle cx="${lx}" cy="${ly}" r="6" fill="#ffffff" stroke="${stroke}" stroke-width="1"/>`;
   o += `<text x="${lx}" y="${ly + 2}" text-anchor="middle" fill="${stroke}" font-size="8" font-family="system-ui" font-weight="700">${seam.id}</text>`;
+  o += `</g>`;
   return o;
 }
 
@@ -603,10 +614,30 @@ function seamStrokeStyle(t) {
 
 function edgeNameToSide(name) {
   const n = String(name || '');
-  if (n.includes('shoulder') || n === 'top' || n === 'cap') return 'top';
-  if (n.includes('bottom') || n.includes('hem') || n === 'cuff_edge') return 'bottom';
-  if (n === 'side' || n === 'side.L' || n === 'front' || n === 'under') return 'left';
-  if (n === 'side.R' || n === 'back' || n === 'armhole') return 'right';
+  // Top / bottom detection
+  if (n.includes('shoulder') || n === 'top' || n === 'cap' || n.includes('neck')) return 'top';
+  if (n.includes('bottom') || n.includes('hem') || n === 'cuff_edge' || n === 'cuff') return 'bottom';
+
+  // Left side heuristics: accept variants from converters (side_l, side.L, left)
+  if (
+    n === 'side' ||
+    n === 'side.L' ||
+    /^side[_.-]?l(\d+)?$/i.test(n) ||
+    /(^|[_.-])left(\d+)?$/i.test(n) ||
+    n === 'front' ||
+    n === 'under'
+  ) return 'left';
+
+  // Right side heuristics: accept variants (side_r, side.R, right)
+  if (
+    n === 'side.R' ||
+    /^side[_.-]?r(\d+)?$/i.test(n) ||
+    /(^|[_.-])right(\d+)?$/i.test(n) ||
+    n === 'back' ||
+    n === 'armhole'
+  ) return 'right';
+
+  // Fallback
   return 'top';
 }
 
@@ -631,10 +662,17 @@ function seamConnectors(items, seamPairs) {
     const sideB = edgeNameToSide(eb);
     const p1 = anchorForSide(A, sideA);
     const p2 = anchorForSide(B, sideB);
-    const c1 = controlForSide(p1, sideA);
-    const c2 = controlForSide(p2, sideB);
+    let c1 = controlForSide(p1, sideA);
+    let c2 = controlForSide(p2, sideB);
+    // Nudge control points so multiple connectors between the same panel sides are distinguishable.
+    const nudge = 8;
+    const dir = (pair.id % 2 === 0) ? 1 : -1;
+    if (sideA === 'left' || sideA === 'right') c1.y += dir * nudge;
+    if (sideA === 'top' || sideA === 'bottom') c1.x += dir * nudge;
+    if (sideB === 'left' || sideB === 'right') c2.y += dir * nudge;
+    if (sideB === 'top' || sideB === 'bottom') c2.x += dir * nudge;
     const style = seamStrokeStyle(pair.type);
-    s += `<path d="M ${p1.x},${p1.y} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}" fill="none" stroke="${color}" stroke-width="1.2" ${style} opacity="0.7"/>`;
+    s += `<path class="seam-connector" data-seam-id="${pair.id}" d="M ${p1.x},${p1.y} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}" fill="none" stroke="${color}" stroke-width="1.2" ${style} opacity="0.7" style="cursor:pointer"/>`;
   }
   return s;
 }

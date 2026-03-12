@@ -263,48 +263,54 @@ function getEdgeIndices(cloth, edge) {
   const { cols, rows } = cloth;
   const indices = [];
 
-  switch (edge) {
-    case 'shoulder':
-    case 'top':
-    case 'cap':
-      // Top row
-      for (let c = 0; c < cols; c++) indices.push(c);
-      break;
-    case 'bottom':
-    case 'hem':
-    case 'cuff_edge':
-      // Bottom row
-      for (let c = 0; c < cols; c++) indices.push((rows - 1) * cols + c);
-      break;
-    case 'side':
-    case 'side.L':
-    case 'front':
-      // Left column
-      for (let r = 0; r < rows; r++) indices.push(r * cols);
-      break;
-    case 'side.R':
-    case 'back':
-      // Right column
-      for (let r = 0; r < rows; r++) indices.push(r * cols + cols - 1);
-      break;
-    case 'armhole':
-      // Right column (armhole is the outer edge)
-      for (let r = 0; r < Math.min(rows, Math.ceil(rows * 0.4)); r++) {
-        indices.push(r * cols + cols - 1);
-      }
-      break;
-    case 'under':
-      // Bottom half of left column (underarm seam)
-      for (let r = Math.floor(rows * 0.3); r < rows; r++) {
-        indices.push(r * cols);
-      }
-      break;
-    default:
-      // Unknown edge — return top row as fallback
-      for (let c = 0; c < cols; c++) indices.push(c);
-      break;
+  const name = String(edge || '');
+
+  // --- Top / Bottom rows ---
+  if (name === 'shoulder' || name === 'top' || name === 'cap' || name.includes('neck')) {
+    for (let c = 0; c < cols; c++) indices.push(c);
+    return indices;
+  }
+  if (name === 'bottom' || name === 'hem' || name === 'cuff' || name === 'cuff_edge') {
+    for (let c = 0; c < cols; c++) indices.push((rows - 1) * cols + c);
+    return indices;
   }
 
+  // --- Left column variants ---
+  if (
+    name === 'side' ||
+    name === 'side.L' ||
+    name === 'front' ||
+    name === 'under' ||
+    /^side[_.-]?l(\d+)?$/i.test(name) ||
+    /(^|[_.-])left(\d+)?$/i.test(name)
+  ) {
+    for (let r = 0; r < rows; r++) indices.push(r * cols);
+    return indices;
+  }
+
+  // --- Right column variants ---
+  if (
+    name === 'side.R' ||
+    name === 'back' ||
+    name === 'armhole' ||
+    /^side[_.-]?r(\d+)?$/i.test(name) ||
+    /(^|[_.-])right(\d+)?$/i.test(name)
+  ) {
+    for (let r = 0; r < rows; r++) indices.push(r * cols + cols - 1);
+    return indices;
+  }
+
+  // armhole (partial) — keep behavior for smaller span on right
+  if (name === 'armhole_right' || name === 'armhole.R') {
+    for (let r = 0; r < Math.min(rows, Math.ceil(rows * 0.4)); r++) {
+      indices.push(r * cols + cols - 1);
+    }
+    return indices;
+  }
+
+  // Fallback: top row
+  for (let c = 0; c < cols; c++) indices.push(c);
+  
   return indices;
 }
 
