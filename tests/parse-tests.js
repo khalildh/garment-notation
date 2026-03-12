@@ -568,3 +568,98 @@ if (adapterFailures.length) {
   console.log(`Failed: ${adapterFailures.join(', ')}`);
   process.exit(1);
 }
+
+// ============================================================================
+// GarmentCodeData converter tests
+// Convert existing Korosteleva examples through the GCD converter (compatible
+// format) and verify the output parses as valid GNL.
+// ============================================================================
+
+import { readFile, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, basename, dirname } from 'node:path';
+import { convert } from '../converter/korosteleva-to-gnl.js';
+import { convertGCD } from '../converter/garmentcodedata-to-gnl.js';
+
+const __dirname = dirname(new URL(import.meta.url).pathname);
+const examplesDir = join(__dirname, '..', 'converter', 'examples');
+
+console.log('\n--- Converter Tests (Korosteleva → GNL) ---\n');
+
+let convPassed = 0;
+let convFailed = 0;
+const convFailures = [];
+
+// Test that existing Korosteleva examples convert and parse
+const exampleFiles = existsSync(examplesDir)
+  ? (await readdir(examplesDir)).filter(f => f.endsWith('.json'))
+  : [];
+
+for (const file of exampleFiles) {
+  const name = `korosteleva_${basename(file, '.json')}`;
+  try {
+    const raw = await readFile(join(examplesDir, file), 'utf-8');
+    const json = JSON.parse(raw);
+    const gnl = convert(json, basename(file, '.json'));
+    parse(gnl); // verify it parses
+    console.log(`  PASS  ${name}`);
+    convPassed++;
+  } catch (err) {
+    console.log(`  FAIL  ${name}: ${err.message}`);
+    convFailures.push(name);
+    convFailed++;
+  }
+}
+
+console.log(`\n${convPassed} passed, ${convFailed} failed out of ${convPassed + convFailed} Korosteleva converter tests`);
+
+console.log('\n--- Converter Tests (GarmentCodeData → GNL) ---\n');
+
+let gcdPassed = 0;
+let gcdFailed = 0;
+const gcdFailures = [];
+
+// Test GCD converter against the same Korosteleva examples (compatible format)
+for (const file of exampleFiles) {
+  const name = `gcd_${basename(file, '.json')}`;
+  try {
+    const raw = await readFile(join(examplesDir, file), 'utf-8');
+    const json = JSON.parse(raw);
+    const gnl = convertGCD(json, basename(file, '.json'));
+    parse(gnl); // verify it parses
+    console.log(`  PASS  ${name}`);
+    gcdPassed++;
+  } catch (err) {
+    console.log(`  FAIL  ${name}: ${err.message}`);
+    gcdFailures.push(name);
+    gcdFailed++;
+  }
+}
+
+// Also test GarmentCodeData-specific examples if they exist
+const gcdExamplesDir = join(__dirname, '..', 'converter', 'examples', 'garmentcodedata');
+if (existsSync(gcdExamplesDir)) {
+  const gcdFiles = (await readdir(gcdExamplesDir)).filter(f => f.endsWith('.json'));
+  for (const file of gcdFiles) {
+    const name = `gcd_native_${basename(file, '.json')}`;
+    try {
+      const raw = await readFile(join(gcdExamplesDir, file), 'utf-8');
+      const json = JSON.parse(raw);
+      const gnl = convertGCD(json, basename(file, '.json'));
+      parse(gnl);
+      console.log(`  PASS  ${name}`);
+      gcdPassed++;
+    } catch (err) {
+      console.log(`  FAIL  ${name}: ${err.message}`);
+      gcdFailures.push(name);
+      gcdFailed++;
+    }
+  }
+}
+
+console.log(`\n${gcdPassed} passed, ${gcdFailed} failed out of ${gcdPassed + gcdFailed} GarmentCodeData converter tests`);
+if (convFailures.length || gcdFailures.length) {
+  const all = [...convFailures, ...gcdFailures];
+  console.log(`Failed: ${all.join(', ')}`);
+  process.exit(1);
+}

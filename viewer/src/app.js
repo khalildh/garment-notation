@@ -5,7 +5,9 @@ import { pegAstToLegacy } from './peg-adapter.js';
 import { render } from './renderer.js';
 import { assemble } from './assembler.js';
 import { convert } from '../../converter/korosteleva-to-gnl.js';
+import { convertGCD } from '../../converter/garmentcodedata-to-gnl.js';
 import { KOROSTELEVA_TEMPLATES } from './korosteleva-examples.js';
+import { GARMENTCODEDATA_TEMPLATES } from './garmentcodedata-examples.js';
 import { EXAMPLES, DEFAULT_KEY } from './examples.js';
 import { create3DView, dispose3DView } from './viewer3d.js';
 
@@ -216,6 +218,23 @@ async function loadKorostelevaTemplate(tpl) {
   }
 }
 
+async function loadGarmentCodeDataTemplate(tpl) {
+  status.textContent = 'Loading...';
+  status.className = 'status';
+  try {
+    const res = await fetch(tpl.path);
+    if (!res.ok) throw new Error(`Failed to fetch ${tpl.path}`);
+    const jsonText = await res.text();
+    const json = JSON.parse(jsonText);
+    editor.value = convertGCD(json, tpl.name);
+    showSourceToggle(jsonText);
+    update();
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = 'status error';
+  }
+}
+
 // Examples dropdown
 const examples = document.getElementById('examples');
 if (examples) {
@@ -263,13 +282,20 @@ async function loadExample(key, { push = false } = {}) {
     if (push) setExampleInUrl(key);
     return;
   }
+  if (GARMENTCODEDATA_TEMPLATES[key]) {
+    const tpl = GARMENTCODEDATA_TEMPLATES[key];
+    await loadGarmentCodeDataTemplate(tpl);
+    examples && (examples.value = key);
+    if (push) setExampleInUrl(key);
+    return;
+  }
 }
 
 // Initial load from ?example=... or default
 (() => {
   const params = new URLSearchParams(window.location.search);
   const initial = params.get('example');
-  if (initial && (EXAMPLES[initial] || KOROSTELEVA_TEMPLATES[initial])) {
+  if (initial && (EXAMPLES[initial] || KOROSTELEVA_TEMPLATES[initial] || GARMENTCODEDATA_TEMPLATES[initial])) {
     loadExample(initial, { push: false });
   } else {
     loadExample(DEFAULT_KEY, { push: false });
