@@ -9,6 +9,7 @@
 /** @typedef {import('./types.js').RegionDims} RegionDims */
 
 import { getRegionDims, combineRegions, resolveVar } from './body.js';
+import { outlineFromShape, outlineBBox, outlinePath } from './outline.js';
 
 const SCALE = 4; // px per cm
 const PAD = 40;   // padding between pieces
@@ -109,9 +110,18 @@ function extractPanelFromDecl(decl) {
   const easeExpr = args[2];
   const grainExpr = args[3];
 
-  const dims = resolveRegionDims(regionExpr);
   const shape = resolveShape(shapeExpr);
   const regionName = resolveRegionName(regionExpr);
+  const outline = outlineFromShape(shapeExpr);
+
+  // A poly panel carries its own measured geometry, so the body region only
+  // says where it sits — the dimensions come from the outline itself.
+  const dims = outline
+    ? (() => {
+        const b = outlineBBox(outline);
+        return { widthTop: b.width, widthBottom: b.width, height: b.height };
+      })()
+    : resolveRegionDims(regionExpr);
 
   // Handle ease(top, bottom) or single scalar
   let easeTop, easeBottom;
@@ -145,13 +155,14 @@ function extractPanelFromDecl(decl) {
     easeTop,
     easeBottom,
     grain,
-    widthTop: dims.widthTop * easeTop,
-    widthBottom: dims.widthBottom * easeBottom,
+    widthTop: outline ? dims.widthTop : dims.widthTop * easeTop,
+    widthBottom: outline ? dims.widthBottom : dims.widthBottom * easeBottom,
     height: dims.height,
     darts: [],
     edges: [],
     isLining: false,
     shapeParams: shapeExpr?.type === 'call' ? shapeExpr : null,
+    outline,
   };
 }
 
@@ -339,6 +350,7 @@ function resolveRegionName(expr) {
 
 function resolveShape(expr) {
   if (!expr) return 'rect';
+  if (expr.type === 'poly') return 'poly';
   if (expr.type === 'reference') return expr.value;
   if (expr.type === 'call') return expr.name;
   return 'rect';
@@ -469,8 +481,10 @@ function renderPanel(p, opts = {}) {
   const displayName = p.name.length > 16 ? p.name.split('.').pop() : p.name;
   g += `<text x="${w / 2}" y="${h / 2 - 6}" text-anchor="middle" fill="${LABEL_COLOR}" font-size="${isLining ? 10 : 12}" font-weight="600" font-family="system-ui">${displayName}</text>`;
 
-  // Dimensions
-  const widthCm = Math.max(p.widthTop, p.widthBottom) * p.ease;
+  // Dimensions — a poly's width is measured, not eased
+  const widthCm = p.outline
+    ? Math.max(p.widthTop, p.widthBottom)
+    : Math.max(p.widthTop, p.widthBottom) * p.ease;
   g += `<text x="${w / 2}" y="${h / 2 + 10}" text-anchor="middle" fill="${DIM_COLOR}" font-size="9" font-family="system-ui">${fmtCm(widthCm)} × ${fmtCm(p.height)}</text>`;
 
   // Shape + ease + grain label
@@ -518,6 +532,9 @@ function edgeCurveMark(w, h, edge) {
 function panelPath(p) {
   const w = p.w, h = p.h;
   const region = p.region;
+
+  // A literal outline is drawn as given — no shape synthesis.
+  if (p.outline) return outlinePath(p.outline, SCALE);
 
   if (p.shape === 'contour') {
     if (region.includes('arm')) return sleevePath(w, h);

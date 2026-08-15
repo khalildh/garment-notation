@@ -26,6 +26,8 @@ const REGION_DIMS = {
   'torso.front':   { wTop: 46, wBot: 37, h: 42 },
   'torso.back':    { wTop: 44, wBot: 37, h: 40 },
   'torso':         { wTop: 46, wBot: 37, h: 42 },
+  'torso.L':       { wTop: 23, wBot: 18.5, h: 42 },
+  'torso.R':       { wTop: 23, wBot: 18.5, h: 42 },
   'torso.front.L': { wTop: 23, wBot: 18.5, h: 42 },
   'torso.front.R': { wTop: 23, wBot: 18.5, h: 42 },
   'torso.back.L':  { wTop: 22, wBot: 18.5, h: 40 },

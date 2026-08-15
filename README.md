@@ -64,22 +64,37 @@ Toggle to "Pieces" to see the individual flat pattern pieces with shape outlines
 
 ![T-Shirt — pattern pieces](images/tshirt-pieces.png)
 
-## Korosteleva Dataset Converter
+## Dataset Converters
 
-The repo includes a [converter](converter/) that transforms garment templates from the [Korosteleva NeurIPS 2021 dataset](https://github.com/maria-korosteleva/Garment-Pattern-Generator) (2D panel geometry as JSON) into GNL.
+The repo includes [converters](converter/) that transform real sewing patterns into GNL:
+
+- the [Korosteleva NeurIPS 2021 dataset](https://github.com/maria-korosteleva/Garment-Pattern-Generator) — 21 parametric templates
+- [GarmentCodeData (ECCV 2024)](https://github.com/maria-korosteleva/GarmentCode) — modular panel naming, edge labels, darts
 
 ```sh
-# Auto-downloads 21 templates from GitHub on first run, converts all
-node converter/convert.js
+node converter/convert.js       # auto-downloads 21 Korosteleva templates, converts all
+node converter/convert-gcd.js   # converts the bundled GarmentCodeData examples
+node converter/evaluate.js      # measures what the conversion actually carries
 ```
 
-Four example templates (tee, skirt, pants, dress) are also available directly in the viewer — select from the "Korosteleva Dataset" section of the examples dropdown. A GNL/JSON toggle lets you compare the raw geometric input with the converted semantic output.
+Examples from both datasets are available directly in the viewer — select from the "Korosteleva Dataset" or "GarmentCodeData" sections of the examples dropdown. A GNL/JSON toggle lets you compare the raw geometric input with the converted output.
+
+### What the conversion is worth
+
+Converted GNL parses and renders exactly like hand-written GNL, which makes it easy to assume it is just as good. `converter/evaluate.js` asks two separate questions and reports both:
+
+| | across 30 dataset templates |
+|---|---|
+| **Round trip** — can the GNL document alone be turned back into the pattern? | 1060/1060 edges, 398/398 stitches, 0 spurious |
+| **Semantics** — do the inferred edge names explain the stitching? | 98% of edges named, 89% of seams join edges that agree about what they are |
+
+The round trip is asserted by `npm test`; the semantic score is reported, not enforced, because naming every edge `edge0..edgeN` would pass the first test and fail the point of the second. The remaining 11% is concentrated in hoods and multi-panel bodices, where GNL has no vocabulary for the feature being stitched.
 
 See [converter/README.md](converter/README.md) for details on the mapping approach.
 
 ## Documentation
 
-- **[Full Specification](garment-notation.md)** — the complete v0.2 spec
+- **[Full Specification](garment-notation.md)** — the complete v0.3 spec
 
 ## Star History
 
@@ -91,7 +106,11 @@ See [converter/README.md](converter/README.md) for details on the mapping approa
 
 ## Status
 
-**v0.2 — Draft.** Includes grain parameter, directional ease, princess seams (EDGE), lining (LAYER), and component composition (USE/ATTACH). A starting point that will need refinement through use, critique, and input from garment-makers, pattern-drafters, and computational designers.
+**v0.3 — Draft.** Adds literal panel outlines (`poly`) and measured opening circumferences, which is what lets a real pattern survive the trip into GNL and back out. v0.2 added the grain parameter, directional ease, princess seams (`EDGE`), lining (`LAYER`), and component composition (`USE`/`ATTACH`).
+
+A `poly` document carries its own geometry and is sufficient to build from. A `contour` document is not, yet — it is sufficient only relative to a body model and a drafting procedure that the spec does not currently define normatively. Closing that is the next real piece of work; see §4.5 of the spec.
+
+A starting point that will need refinement through use, critique, and input from garment-makers, pattern-drafters, and computational designers.
 
 ## License
 

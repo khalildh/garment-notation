@@ -38,7 +38,18 @@ export function mapPanelToRegion(panelName, garmentType) {
   if (name === 'low_back' || name === 'low_lback') return { region: '%leg.L', side: 'L' };
   if (name === 'low_rback') return { region: '%leg.R', side: 'R' };
 
-  // Skirt side panels (4-panel skirts)
+  // Skirt panels — a skirt hangs from the waist over the hips and upper legs,
+  // so its panels are not torso panels however they are named. Multi-gore
+  // skirts number their panels (right_0, left_2, ...).
+  if (garmentType === 'skirt') {
+    if (name === 'front') return { region: '%torso.front + %leg[0..0.3]' };
+    if (name === 'back') return { region: '%torso.back + %leg[0..0.3]' };
+    if (/^l(eft)?(_|$)/.test(name)) return { region: '%torso.L + %leg.L[0..0.3]', side: 'L' };
+    if (/^r(ight)?(_|$)/.test(name)) return { region: '%torso.R + %leg.R[0..0.3]', side: 'R' };
+    return { region: '%torso + %leg[0..0.3]' };
+  }
+
+  // Skirt side panels named as such outside a plain skirt
   if (name === 'left') return { region: '%torso.L', side: 'L' };
   if (name === 'right') return { region: '%torso.R', side: 'R' };
 

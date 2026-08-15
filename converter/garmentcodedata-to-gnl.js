@@ -3,18 +3,19 @@
 // modular panel naming, and right_wrong stitch annotations.
 
 import { mapGCDPanelToRegion, detectGCDGarmentType } from './garmentcodedata-region-map.js';
-import { nameEdges } from './edge-namer.js';
+import { nameEdges, panelKindFromRegion } from './edge-namer.js';
+import { assembleGNL } from './korosteleva-to-gnl.js';
 import {
-  inferShape, inferEase, checkSymmetry,
-  findOpenEdges, inferOpeningType, sanitizeName,
+  anatomicalVertices, buildRing, formatPoly, checkSymmetry,
+  findOpenEdges, collectOpenings, sanitizeName, provenanceHeader,
 } from './shared.js';
 
 // Map GarmentCodeData edge labels to semantic edge names
 const EDGE_LABEL_MAP = {
-  // Common GarmentCodeData edge labels
   'armhole':    'armhole',
   'shoulder':   'shoulder',
   'neckline':   'neckline',
+  'collar':     'neckline',
   'hem':        'hem',
   'waist':      'waist',
   'side':       'side',
@@ -23,7 +24,6 @@ const EDGE_LABEL_MAP = {
   'inseam':     'inseam',
   'outseam':    'outseam',
   'crotch':     'crotch',
-  'collar':     'collar',
   'placket':    'placket',
   'dart':       'dart',
   'fold':       'fold',
@@ -31,41 +31,53 @@ const EDGE_LABEL_MAP = {
 
 /**
  * Map an edge's label property to a semantic name.
- * Returns null if no label or unrecognized label.
+ *
+ * GarmentCodeData labels carry a side prefix (`left_collar`), which is the
+ * side as drafted. Anatomical sides are worked out from the geometry instead,
+ * so the prefix is dropped here rather than trusted.
+ *
+ * Returns null if there is no label or it is not recognised.
  */
 function mapEdgeLabel(edge) {
   if (!edge.label) return null;
   const label = edge.label.toLowerCase().replace(/\s+/g, '_');
-  return EDGE_LABEL_MAP[label] || label.replace(/[^a-z0-9_]/g, '');
+  if (EDGE_LABEL_MAP[label]) return EDGE_LABEL_MAP[label];
+
+  const stripped = label.replace(/^(left|right)_/, '');
+  if (EDGE_LABEL_MAP[stripped]) return EDGE_LABEL_MAP[stripped];
+
+  return stripped.replace(/[^a-z0-9_]/g, '') || null;
 }
 
 /**
- * Name edges using labels first, then fall back to geometric heuristics.
+ * Name edges geometrically, then let the dataset's own labels correct the
+ * classification where it has them. The side suffix from the geometric pass is
+ * carried over, since the labels do not name anatomical sides reliably.
  */
-function nameEdgesWithLabels(edges, vertices, panelName, garmentType) {
-  // Check if any edges have labels
-  const hasLabels = edges.some(e => e.label);
+function nameEdgesWithLabels(edges, vertices, panelName, garmentType, kind) {
+  const geometric = nameEdges(edges, vertices, panelName, garmentType, { kind });
+  if (!edges.some(e => e.label)) return geometric;
 
-  if (!hasLabels) {
-    // Fall back entirely to geometric naming
-    return nameEdges(edges, vertices, panelName, garmentType);
-  }
-
-  // Use labels where available, geometric fallback otherwise
-  const geometricNames = nameEdges(edges, vertices, panelName, garmentType);
+  const used = new Set();
   const names = [];
-  const usedNames = new Set();
 
   for (let i = 0; i < edges.length; i++) {
-    let name = mapEdgeLabel(edges[i]) || geometricNames[i];
+    const labelled = mapEdgeLabel(edges[i]);
+    let name = geometric[i];
 
-    // Deduplicate
-    if (usedNames.has(name)) {
-      let suffix = 2;
-      while (usedNames.has(name + suffix)) suffix++;
-      name = name + suffix;
+    if (labelled) {
+      // Keep the geometric side suffix — `left_collar` on a mirrored panel is
+      // not necessarily the wearer's left.
+      const suffix = (geometric[i].match(/_(l|r)$/) || [])[0] || '';
+      name = labelled.endsWith(suffix) ? labelled : labelled + suffix;
     }
-    usedNames.add(name);
+
+    if (used.has(name)) {
+      let n = 2;
+      while (used.has(`${name}_${n}`)) n++;
+      name = `${name}_${n}`;
+    }
+    used.add(name);
     names.push(name);
   }
 
@@ -85,100 +97,87 @@ export function convertGCD(json, templateName) {
   const stitches = pattern.stitches || [];
   const panelNames = Object.keys(panels);
   const garmentType = detectGCDGarmentType(panelNames);
-  // GarmentCodeData defaults to cm (100 units/meter)
   const unitsPerMeter = json.properties?.units_in_meter || 100;
   const scale = 100 / unitsPerMeter;
 
   // Respect panel_order if present
   const panelOrder = pattern.panel_order || panelNames;
   const orderedPanelNames = panelOrder.filter(n => panels[n]);
-  // Add any panels not in panel_order
   for (const n of panelNames) {
     if (!orderedPanelNames.includes(n)) orderedPanelNames.push(n);
   }
 
-  // Check for bilateral symmetry (also check GCD-style _left/_right pairs)
-  const isSym = checkSymmetry(panelNames) || checkGCDSymmetry(panelNames);
-  const flags = isSym ? ' [SYM]' : '';
+  const regions = {};
+  for (const name of panelNames) {
+    regions[name] = mapGCDPanelToRegion(name, garmentType).region;
+  }
 
-  // Build edge name lookup using label-aware naming
   const edgeNames = {};
   for (const [name, panel] of Object.entries(panels)) {
-    edgeNames[name] = nameEdgesWithLabels(panel.edges, panel.vertices, name, garmentType);
+    edgeNames[name] = nameEdgesWithLabels(
+      panel.edges, anatomicalVertices(panel), name, garmentType,
+      panelKindFromRegion(regions[name], garmentType) || undefined);
   }
 
-  // Build panel declarations (in panel_order)
   const declarations = [];
+  const unresolved = [];
   for (const name of orderedPanelNames) {
     const panel = panels[name];
-    const { region } = mapGCDPanelToRegion(name, garmentType);
-    const shape = inferShape(panel.vertices, panel.edges);
-    const ease = inferEase(panel.vertices, region, scale);
+    const region = regions[name];
     const gnlName = sanitizeName(name);
-    declarations.push(`  ${gnlName} = P(${region}, ${shape}, ${ease})`);
+    const ring = buildRing(panel);
+
+    if (!ring) {
+      unresolved.push(name);
+      declarations.push(`  ${gnlName} = P(${region}, contour, 1.0)   -- outline not a single closed ring`);
+      continue;
+    }
+
+    const poly = formatPoly(ring.ring, edgeNames[name], scale);
+    declarations.push(`  ${gnlName} = P(${region}, ${poly}, 1.0)`);
   }
 
-  // Build seam declarations
   const seams = [];
-  const comments = [];
+  const orientationNotes = [];
   for (const stitch of stitches) {
     const [a, b] = stitch;
-    const aName = sanitizeName(a.panel);
-    const bName = sanitizeName(b.panel);
-    const aEdge = edgeNames[a.panel]?.[a.edge] || `e${a.edge}`;
-    const bEdge = edgeNames[b.panel]?.[b.edge] || `e${b.edge}`;
+    const aEdge = edgeNames[a.panel]?.[a.edge] || `edge${a.edge}`;
+    const bEdge = edgeNames[b.panel]?.[b.edge] || `edge${b.edge}`;
+    const ref = `${sanitizeName(a.panel)}.${aEdge}, ${sanitizeName(b.panel)}.${bEdge}`;
+    seams.push(`S(${ref}, plain)`);
 
-    // Check for right_wrong annotation
-    const rightWrong = a.right_wrong || b.right_wrong;
-    let comment = '';
-    if (rightWrong) {
-      comment = `  -- fabric orientation: ${rightWrong}`;
-      comments.push(comment);
+    const rightWrong = a.right_wrong ?? b.right_wrong;
+    if (rightWrong !== undefined && rightWrong !== null) {
+      orientationNotes.push(`${sanitizeName(a.panel)}.${aEdge} ↔ ${sanitizeName(b.panel)}.${bEdge}: right_wrong=${rightWrong}`);
     }
-
-    seams.push(`    S(${aName}.${aEdge}, ${bName}.${bEdge}, plain)`);
   }
 
-  // Find open edges
   const openEdges = findOpenEdges(panels, stitches, edgeNames);
-  const openings = [];
-  for (const { panel, edgeIdx, edgeName } of openEdges) {
-    const openingType = inferOpeningType(edgeName, panel, garmentType);
-    if (openingType) {
-      openings.push(`  ${openingType.name} = O(${openingType.location}, ${openingType.shape}, ${openingType.size})`);
-    }
+  const openings = collectOpenings(panels, openEdges, garmentType, scale);
+
+  const extra = [];
+  if (unresolved.length) {
+    extra.push(`Panels whose edges do not form one closed ring, emitted without geometry: ${unresolved.join(', ')}.`);
+  }
+  if (orientationNotes.length) {
+    extra.push('GarmentCodeData right_wrong annotations, which GNL has no seam-facing');
+    extra.push('  parameter for, so they survive only as this note:');
+    for (const n of orientationNotes) extra.push(`  ${n}`);
   }
 
-  const uniqueOpenings = [...new Set(openings)];
-
-  // Assemble GNL
-  let gnl = `GARMENT ${sanitizeName(templateName)}${flags} {\n\n`;
-
-  // Panels
-  gnl += `  -- Panels\n`;
-  gnl += declarations.join('\n') + '\n\n';
-
-  // Openings
-  if (uniqueOpenings.length > 0) {
-    gnl += `  -- Openings\n`;
-    gnl += uniqueOpenings.join('\n') + '\n\n';
-  }
-
-  // right_wrong annotations as comments
-  if (comments.length > 0) {
-    gnl += `  -- Fabric orientation notes (GarmentCodeData right_wrong annotations)\n`;
-    gnl += comments.join('\n') + '\n\n';
-  }
-
-  // Build order
-  if (seams.length > 0) {
-    gnl += `  -- Build order\n`;
-    gnl += `  BUILD:\n`;
-    gnl += seams.join('\n    >> ') + '\n';
-  }
-
-  gnl += '}\n';
-  return gnl;
+  return assembleGNL({
+    name: sanitizeName(templateName),
+    header: provenanceHeader({
+      name: sanitizeName(templateName),
+      source: 'GarmentCodeData (ECCV 2024)',
+      tool: 'converter/convert-gcd.js',
+      bilateral: checkSymmetry(panelNames) || checkGCDSymmetry(panelNames),
+      extra,
+    }),
+    declarations,
+    openings,
+    seams,
+  });
 }
 
 /**

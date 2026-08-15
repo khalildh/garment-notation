@@ -10,12 +10,14 @@
  *   shape: string,
  *   ease: number,
  *   dims: RegionDims,
+ *   outline: import('./types.js').PolyVertex[] | null,
  *   raw: Expr
  * }} AssemblerPanel
  */
 
 import { getRegionDims, combineRegions, BODY } from './body.js';
 import { renderBodyOverlay } from './overlay.js';
+import { outlineFromShape, outlineBBox } from './outline.js';
 
 const SCALE = 4;
 const STROKE = '#334155';
@@ -92,11 +94,13 @@ function extractPanelInfo(block) {
     if (decl.value.type === 'call' && decl.value.name === 'P') {
       const args = decl.value.args;
       const region = resolveRegionStr(args[0]);
-      const shape = args[1]?.value || args[1]?.name || 'rect';
-      const ease = resolveNumber(args[2]) ?? 1.0;
-      const dims = resolveRegionDims(args[0]);
+      const outline = outlineFromShape(args[1]);
+      const shape = outline ? 'poly' : (args[1]?.value || args[1]?.name || 'rect');
+      // A poly panel is already eased — its measured outline is the truth.
+      const ease = outline ? 1.0 : (resolveNumber(args[2]) ?? 1.0);
+      const dims = outline ? outlineDims(outline) : resolveRegionDims(args[0]);
 
-      panels[decl.name] = { region, shape, ease, dims, raw: decl.value };
+      panels[decl.name] = { region, shape, ease, dims, outline, raw: decl.value };
     }
   }
   return panels;
@@ -729,6 +733,12 @@ function drawGeneric(block, panels, edges = [], hasLining = false, overlay = nul
 }
 
 // --- Helpers ---
+
+/** @param {import('./types.js').PolyVertex[]} outline @returns {RegionDims} */
+function outlineDims(outline) {
+  const b = outlineBBox(outline);
+  return { widthTop: b.width, widthBottom: b.width, height: b.height };
+}
 
 function resolveRegionDims(expr) {
   if (!expr) return { widthTop: 30, widthBottom: 30, height: 30 };

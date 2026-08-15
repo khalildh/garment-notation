@@ -2,7 +2,7 @@
 
 ### A Formal Descriptive Language for Clothing
 
-**Version 0.2 — Draft Specification**
+**Version 0.3 — Draft Specification**
 
 ---
 
@@ -78,7 +78,7 @@ P(region, shape, ease, grain)
 ```
 
 - **region**: the body region it covers
-- **shape**: geometric outline — `rect`, `trapezoid`, `circle`, `contour` (body-mapped), or parametric curves
+- **shape**: geometric outline — `rect`, `trapezoid`, `circle`, `contour` (body-mapped), or `poly` (a literal outline; see §4.5)
 - **ease**: fit at the panel's relationship to the body, expressed as either:
   - A single ratio: `1.05` (uniform 5% ease across the panel)
   - A top/bottom pair: `ease(1.0, 2.5)` (fitted at top, flared at bottom — e.g. A-line)
@@ -111,10 +111,11 @@ O(location, shape, circumference)
 
 - **location**: landmark or region boundary
 - **shape**: `circle`, `slit`, `keyhole`, `V`, `square`, `envelope`
-- **circumference**: absolute measurement or `body + ease`
+- **circumference**: absolute measurement (`45.3cm`) or `body + ease`
 
 ```
 O(@neck, circle, body+2cm)         — a crew neckline
+O(@neck, circle, 45.3cm)           — a measured neckline
 O(@neck, V, depth=15cm)            — a V-neck opening
 O(@waist, circle, body+0cm)        — a fitted waist opening
 O(%torso.front, slit, @neck..@hip) — a full front opening (like a coat)
@@ -164,6 +165,43 @@ EDGE(front_side.center, curve(@bust.L, 3cm))
 
 S(front_center.side, front_side.center, plain)   — princess seam
 ```
+
+### 4.5 Literal outlines `poly`
+
+Every shape above is *resolved* — `contour` means "whatever this region's outline comes to on this body", which is only as well defined as the body model and the drafting rules behind it. That abstraction is the point of the notation, but it leaves GNL unable to write down a pattern piece that already exists.
+
+`poly` closes that gap. It is a closed ring of vertices in panel-local centimetres, y-up, and it says exactly what the piece is:
+
+```
+front = P(%torso.front, poly[
+  (0, 21.11) : neckline_r,
+  (-25, 56.11) : shoulder_r,
+  (-55, 56.11) ~ (0.7, 0.4) : armhole_r,
+  (-65, 6.11) : side_r,
+  (-65, -128.89) : hem,
+  (65, -128.89) : side_l,
+  (65, 6.11) ~ (0.2, 0.35; 0.5, 0.2) : armhole_l,
+  (55, 56.11) : shoulder_l,
+  (25, 56.11) : neckline_l
+], 1.0)
+```
+
+Each vertex describes the edge *leaving* it — the edge from that vertex to the next, with the last wrapping back to the first — so an edge can carry a curve, a name, or both:
+
+- `~ (cx, cy)` — quadratic curve, one control point
+- `~ (cx, cy; cx2, cy2)` — cubic curve, two control points
+- `~ arc(radius, large_arc, sweep)` — circular arc
+- `: name` — the edge's name, which is what `S(...)` and `F(...)` refer to
+
+Control points are given in the edge's own frame: x runs along the edge from start to end, y runs perpendicular to it, both as fractions of the edge vector. This is the convention the Korosteleva and GarmentCode pattern datasets use, so their geometry transfers without reinterpretation.
+
+Naming edges inside the outline is what makes a literal panel addressable. Without it a poly is only a shape; with it, `S(front.shoulder_l, back.shoulder_l, plain)` refers to specific segments of specific pieces, and the document can be turned back into a sewing pattern.
+
+Because the outline is itself the measurement, `ease` carries no further information on a poly panel — write `1.0`.
+
+> **Where this leaves the generative claim.** With `poly`, a GNL document can be sufficient to construct a garment without ambiguity, because the geometry is in the document. Without it — using `contour` and a region — the document is sufficient only relative to a body model and a drafting procedure, and GNL does not yet specify either normatively. The two levels are meant to coexist: `contour` says what a piece is *for*, `poly` says what it *is*.
+
+> **v0.3 note**: `poly` is new in v0.3, along with absolute circumferences on `O(...)`. Both exist because converting real pattern datasets showed the language could describe a garment but not record one: panel geometry had to be thrown away at the door, and openings could only be stated as an ease over an unstated body. `converter/evaluate.js` measures what the notation now carries — 1060 edges and 398 stitches across 30 dataset templates survive the round trip through GNL and back.
 
 ---
 
@@ -417,6 +455,8 @@ COMPONENT notched_lapel {
 | `ATTACH`| Attach component    | `ATTACH(sleeve, armhole)`        |
 | `EDGE` | Shaped panel edge    | `EDGE(P.side, curve(@bust, 3cm))`|
 | `LAYER`| Internal lining      | `LAYER lining { ... }`           |
+| `poly` | Literal outline      | `poly[(0,0) : hem, (10,0) : side]`|
+| `~`    | Edge curve (in poly) | `(10,0) ~ (0.5, 0.2) : armhole`  |
 
 ---
 
@@ -548,19 +588,20 @@ GARMENT jacket [SYM] {
 
 ---
 
-## 13. Extensions (future)
+## 12. Extensions (future)
 
 - **Layering**: `OVER(garment_a, garment_b)` — describing how garments interact when worn together
 - **Animation / Movement**: coupling with Labanotation to describe how garments behave in motion
 - **Colorwork**: `COLOR(panel, pattern_type, palette)` — prints, stripes, colorblocking
 - **Embellishment**: `EMB(panel, type, placement)` — embroidery, beading, appliqué
 - **Degradation / Finishing**: `FINISH(garment, wash_type)` — stone-wash, distress, enzyme-wash
-- **Formal grammar specification**: BNF/EBNF for parser implementation
+- **Normative body model**: measurements as a first-class part of the language, with a specified procedure for resolving region + ease + `contour` into an outline — the missing half of the generative claim (see §4.5)
+- **Darts from geometry**: a converted V-notch currently arrives as two edges joined by a seam rather than as `D(...)`
 - **Visual notation**: A graphical symbol system parallel to the textual syntax (as Labanotation has both verbal description and staff notation)
 
 ---
 
-## 14. Comparison to Existing Systems
+## 13. Comparison to Existing Systems
 
 | System          | Classifies | Generates | Encodes construction | Formal grammar |
 |-----------------|:----------:|:---------:|:-------------------:|:--------------:|
@@ -568,8 +609,10 @@ GARMENT jacket [SYM] {
 | FashionPedia    | ✓          |           |                     |                |
 | Sewing patterns | ✓          | ✓         | partial             |                |
 | Knitting notation| ✓         | ✓         | ✓                   | ✓              |
-| **GNL**         | ✓          | ✓         | ✓                   | ✓              |
+| **GNL**         | ✓          | with `poly` | ✓                 | ✓              |
+
+GNL's "generates" is qualified on purpose. A document using `poly` carries its own geometry and can be built from without further assumptions; a document using `contour` cannot, until the body model and drafting procedure in §4.5 are specified. Sewing patterns are marked "partial" on construction because they carry stitching but rarely an ordered build sequence; GNL's `>>` chain is an ordering, though converted files fill it with dataset order rather than a real sewing sequence.
 
 ---
 
-*GNL v0.2 — A starting point. Like early Labanotation, this will need refinement through use, critique, and the input of garment-makers, pattern-drafters, and computational designers.*
+*GNL v0.3 — A starting point. Like early Labanotation, this will need refinement through use, critique, and the input of garment-makers, pattern-drafters, and computational designers.*

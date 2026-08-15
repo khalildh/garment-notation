@@ -1,6 +1,6 @@
 # Contributing
 
-GNL is a draft specification (v0.2) and the viewer is a proof-of-concept. Contributions are welcome — from language design feedback to viewer improvements.
+GNL is a draft specification (v0.3) and the viewer is a proof-of-concept. Contributions are welcome — from language design feedback to viewer improvements.
 
 ---
 
@@ -8,7 +8,7 @@ GNL is a draft specification (v0.2) and the viewer is a proof-of-concept. Contri
 
 ```
 garment-notation/
-  garment-notation.md     # Full v0.2 specification
+  garment-notation.md     # Full v0.3 specification
   README.md               # Project overview
   index.html              # Redirects to viewer/
   images/                 # Screenshot assets for README
@@ -16,17 +16,29 @@ garment-notation/
     syntax-reference.md   # GNL quick reference
     viewer.md             # Viewer architecture guide
     contributing.md       # This file
+  grammar/
+    gnl.peg               # PEG grammar — the normative syntax
   viewer/
     index.html            # Viewer app (HTML + CSS)
     src/
+      gnl-parser.js       # Generated from grammar/gnl.peg — do not edit
+      peg-adapter.js      # PEG AST → the renderer's AST
       types.js            # JSDoc type definitions
       tokenizer.js        # Regex-based tokenizer
       parser.js           # Recursive descent parser
       body.js             # Body measurements & region dims
+      outline.js          # Literal `poly` outlines: geometry & SVG paths
       renderer.js         # Flat pattern piece SVG renderer
       assembler.js        # Assembled garment SVG renderer
       app.js              # UI controller & examples
+  converter/              # Pattern datasets → GNL (see converter/README.md)
+    evaluate.js           # Round-trip and semantic measurement
+  tests/
+    parse-tests.js        # Parse, adapter, converter, and round-trip tests
 ```
+
+`viewer/src/gnl-parser.js` is generated. After changing `grammar/gnl.peg`, run
+`npm run generate` and commit both.
 
 ---
 

@@ -1,6 +1,6 @@
 # GNL Syntax Reference
 
-Quick reference for the Garment Notation Language (v0.2). See [garment-notation.md](../garment-notation.md) for the full specification.
+Quick reference for the Garment Notation Language (v0.3). See [garment-notation.md](../garment-notation.md) for the full specification.
 
 ---
 
@@ -33,7 +33,7 @@ A flat piece of fabric mapped onto a body region.
 | Parameter | Values | Example |
 |-----------|--------|---------|
 | `region` | `%torso.front`, `%arm.L[0..0.4]`, region unions with `+` | `%torso.front + %leg[0..0.2]` |
-| `shape` | `rect`, `trapezoid`, `contour`, `circle` | `contour` |
+| `shape` | `rect`, `trapezoid`, `contour`, `circle`, `poly[...]` | `contour` |
 | `ease` | Scalar `1.15` or directional `ease(1.0, 2.5)` | `1.15` |
 | `grain` | `warp` (default), `weft`, `bias`, angle (`45°`) | `bias` |
 
@@ -43,6 +43,29 @@ skirt  = P(%leg.L, rect, ease(1.0, 2.5))
 draped = P(%torso.front, contour, 1.1, bias)
 ```
 
+#### Literal outlines `poly`
+
+A closed vertex ring in panel-local centimetres, y-up. Each vertex describes the
+edge *leaving* it — optionally curved, optionally named — and the last wraps back
+to the first. Since the outline is the measurement, `ease` is written `1.0`.
+
+```
+front = P(%torso.front, poly[
+  (0, 21.11) : neckline_r,
+  (-25, 56.11) : shoulder_r,
+  (-55, 56.11) ~ (0.7, 0.4) : armhole_r,
+  (-65, -128.89) ~ arc(10.88, 0, 1) : hem,
+  (65, 6.11) ~ (0.2, 0.35; 0.5, 0.2) : armhole_l
+], 1.0)
+```
+
+| Suffix | Meaning |
+|--------|---------|
+| `~ (cx, cy)` | quadratic curve, one edge-relative control point |
+| `~ (cx, cy; cx2, cy2)` | cubic curve, two control points |
+| `~ arc(r, large_arc, sweep)` | circular arc |
+| `: name` | the edge's name, used by `S(...)` and `F(...)` |
+
 ### Opening `O(location, shape, circumference)`
 
 A hole where the body enters or exits.
@@ -51,10 +74,11 @@ A hole where the body enters or exits.
 |-----------|--------|---------|
 | `location` | Landmark `@neck` or region `%torso.front` | `@waist` |
 | `shape` | `circle`, `slit`, `V`, `keyhole`, `square`, `envelope`, `open` | `circle` |
-| `circumference` | `body+Ncm` or absolute | `body+8cm` |
+| `circumference` | `body+Ncm` or an absolute measurement | `body+8cm`, `45.3cm` |
 
 ```
 neck = O(@neck, circle, body+8cm)
+neck = O(@neck, circle, 45.3cm)
 hem  = O(@knee, open)
 zip  = O(%torso.back, slit, @neck)
 ```
@@ -298,6 +322,8 @@ Double-dash `--` comments extend to end of line.
 | `@` | Body landmark | `@shoulder.L` |
 | `%` | Body region | `%torso.front` |
 | `P` | Panel | `P(%arm.L, contour, 1.1, bias)` |
+| `poly` | Literal outline | `poly[(0,0) : hem, (10,0) : side_l]` |
+| `~` | Edge curve (in poly) | `(10,0) ~ (0.5, 0.2) : armhole` |
 | `O` | Opening | `O(@neck, V, depth=12cm)` |
 | `S` | Seam | `S(P1.edge, P2.edge, french)` |
 | `EDGE` | Shaped panel edge | `EDGE(P.side, curve(@bust, 3cm))` |

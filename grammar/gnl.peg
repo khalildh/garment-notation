@@ -132,6 +132,7 @@ OpeningParam
   = "body" _ "+" _ val:Measurement          { return { circumference: { base: "body", ease: val } } }
   / "body" _ "+" _ val:Number _ unit:Unit    { return { circumference: { base: "body", ease: { value: val, unit } } } }
   / "depth" _ "=" _ val:Measurement          { return { depth: val } }
+  / val:Measurement                          { return { circumference: { base: "absolute", value: val } } }
   / loc1:AnyRef _ ".." _ loc2:AnyRef  { return { span: { from: loc1, to: loc2 } } }
   / ref:AnyRef  { return { param: ref } }
 
@@ -168,12 +169,57 @@ ComponentUse
 // ---------------------------------------------------------------------------
 
 ShapeExpr
-  = "contour" width:("(" _ "width" _ "=" _ Measurement _ ")")? 
+  = PolyShape
+  / "contour" width:("(" _ "width" _ "=" _ Measurement _ ")")?
     { return { shape: "contour", width: width ? width[6] : null } }
   / "rect"          { return { shape: "rect" } }
   / "trapezoid" params:TrapezoidParams?  
     { return { shape: "trapezoid", ...params } }
   / "circle"        { return { shape: "circle" } }
+
+// ---------------------------------------------------------------------------
+// 3b. poly — literal panel outline
+// ---------------------------------------------------------------------------
+// A closed outline given as an ordered vertex ring in centimetres, panel-local,
+// y-up. Each vertex may annotate the edge *leaving* it (vertex i -> i+1, the
+// last wrapping back to the first) with a curve and/or a name:
+//
+//   poly[(0, 21.1) : neckline_r,
+//        (-25, 56.1) : shoulder_r,
+//        (-55, 56.1) ~ (0.7, 0.4) : armhole_r,
+//        ...]
+//
+// Curve forms mirror the control-point conventions used by pattern datasets:
+//   ~ (cx, cy)              quadratic — one control point, edge-relative
+//   ~ (cx, cy; cx2, cy2)    cubic — two control points, edge-relative
+//   ~ arc(radius, large, sweep)   circular arc
+
+PolyShape
+  = "poly" _ "[" _ head:PolyVertex tail:(_ "," _ PolyVertex)* _ ","? _ "]"
+    { return { shape: "poly", vertices: [head, ...tail.map(t => t[3])] } }
+
+PolyVertex
+  = "(" _ x:Number _ "," _ y:Number _ ")" curve:(_ "~" _ EdgeCurve)? label:(_ ":" _ Identifier)?
+    {
+      return {
+        x, y,
+        curve: curve ? curve[3] : null,
+        edge: label ? label[3] : null
+      }
+    }
+
+EdgeCurve
+  = "arc(" _ r:Number _ "," _ large:Integer _ "," _ sweep:Integer _ ")"
+    { return { type: "arc", radius: r, large_arc: large, sweep } }
+  / "(" _ head:ControlPoint tail:(_ ";" _ ControlPoint)* _ ")"
+    {
+      const control = [head, ...tail.map(t => t[3])]
+      return { type: control.length === 1 ? "quadratic" : "cubic", control }
+    }
+
+ControlPoint
+  = x:Number _ "," _ y:Number { return { x, y } }
+
 
 TrapezoidParams
   = "(" _ head:TrapezoidParam tail:(_ "," _ TrapezoidParam)* _ ")"

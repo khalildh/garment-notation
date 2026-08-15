@@ -290,6 +290,12 @@ function convertShape(shape) {
 
   const name = shape.shape;
 
+  // poly — a literal outline. Carried through structurally rather than as a
+  // call, since the vertex ring is data, not an argument list.
+  if (name === 'poly') {
+    return /** @type {Expr} */ ({ type: 'poly', vertices: shape.vertices });
+  }
+
   // contour with optional width param
   if (name === 'contour') {
     if (shape.width) {
@@ -481,6 +487,8 @@ function convertOpening(opening) {
         left: { type: 'reference', value: 'body' },
         right: convertMeasurement(circ.ease),
       }));
+    } else if (circ.base === 'absolute') {
+      args.push(convertMeasurement(circ.value));
     }
   }
 

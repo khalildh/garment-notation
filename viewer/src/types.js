@@ -25,12 +25,27 @@
  * @typedef {{ type: 'modifier', base: Expr, value: Expr }} ModifierExpr
  * @typedef {{ type: 'set', elements: Expr[] }} SetExpr
  * @typedef {{ type: 'named_arg', name: string, value: Expr }} NamedArgExpr
+ * @typedef {{ type: 'poly', vertices: PolyVertex[] }} PolyExpr
  */
 
 /**
  * @typedef {NumberExpr | LandmarkExpr | RegionExpr | ReferenceExpr
  *   | CallExpr | BinaryExpr | RangeExpr | ModifierExpr
- *   | SetExpr | NamedArgExpr} Expr
+ *   | SetExpr | NamedArgExpr | PolyExpr} Expr
+ */
+
+// ── Literal outlines (poly) ────────────────────────────
+
+/**
+ * @typedef {{ x: number, y: number }} Point2
+ * @typedef {{ type: 'quadratic' | 'cubic', control: Point2[] }} BezierCurve
+ * @typedef {{ type: 'arc', radius: number, large_arc: number, sweep: number }} ArcCurve
+ * @typedef {BezierCurve | ArcCurve} EdgeCurve
+ */
+
+/**
+ * A poly vertex. `curve` and `edge` describe the edge *leaving* this vertex.
+ * @typedef {{ x: number, y: number, curve: EdgeCurve | null, edge: string | null }} PolyVertex
  */
 
 // ── AST Structures ─────────────────────────────────────
@@ -98,6 +113,7 @@
  *   isLining: boolean,
  *   layerName?: string,
  *   shapeParams: Expr | null,
+ *   outline?: PolyVertex[] | null,
  *   seams?: PanelSeam[],
  *   w?: number,
  *   h?: number,

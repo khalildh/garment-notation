@@ -1,11 +1,11 @@
 // Korosteleva JSON → GNL converter
-// Converts garment templates from the NeurIPS 2021 dataset into GNL notation
+// Converts garment templates from the NeurIPS 2021 dataset into GNL notation.
 
 import { mapPanelToRegion, detectGarmentType } from './region-map.js';
-import { nameEdges, edgeLength } from './edge-namer.js';
+import { nameEdges, panelKindFromRegion } from './edge-namer.js';
 import {
-  inferShape, inferEase, checkSymmetry,
-  findOpenEdges, inferOpeningType, sanitizeName,
+  anatomicalVertices, buildRing, formatPoly, checkSymmetry,
+  findOpenEdges, collectOpenings, sanitizeName, provenanceHeader,
 } from './shared.js';
 
 /**
@@ -24,72 +24,93 @@ export function convert(json, templateName) {
   const unitsPerMeter = json.properties?.units_in_meter || 100;
   const scale = 100 / unitsPerMeter; // normalize to cm
 
-  // Check for bilateral symmetry
-  const isSym = checkSymmetry(panelNames);
-  const flags = isSym ? ' [SYM]' : '';
+  const regions = {};
+  for (const name of panelNames) {
+    regions[name] = mapPanelToRegion(name, garmentType).region;
+  }
 
-  // Build edge name lookup: { panelName: string[] }
   const edgeNames = {};
   for (const [name, panel] of Object.entries(panels)) {
-    edgeNames[name] = nameEdges(panel.edges, panel.vertices, name, garmentType);
+    // Named in anatomical coordinates so that "left" means the wearer's left
+    // on every piece, however the piece itself was drafted.
+    edgeNames[name] = nameEdges(
+      panel.edges, anatomicalVertices(panel), name, garmentType,
+      { kind: panelKindFromRegion(regions[name], garmentType) || undefined });
   }
 
-  // Build panel declarations
   const declarations = [];
+  const unresolved = [];
   for (const [name, panel] of Object.entries(panels)) {
-    const { region } = mapPanelToRegion(name, garmentType);
-    const shape = inferShape(panel.vertices, panel.edges);
-    const ease = inferEase(panel.vertices, region, scale);
+    const region = regions[name];
     const gnlName = sanitizeName(name);
-    declarations.push(`  ${gnlName} = P(${region}, ${shape}, ${ease})`);
+    const ring = buildRing(panel);
+
+    if (!ring) {
+      unresolved.push(name);
+      declarations.push(`  ${gnlName} = P(${region}, contour, 1.0)   -- outline not a single closed ring`);
+      continue;
+    }
+
+    // With a literal outline the ease parameter carries no information — the
+    // outline is the measurement — so it is emitted as 1.0 rather than as a
+    // ratio against a reference body the source pattern never mentioned.
+    const poly = formatPoly(ring.ring, edgeNames[name], scale);
+    declarations.push(`  ${gnlName} = P(${region}, ${poly}, 1.0)`);
   }
 
-  // Build seam declarations
   const seams = [];
   for (const stitch of stitches) {
     const [a, b] = stitch;
-    const aName = sanitizeName(a.panel);
-    const bName = sanitizeName(b.panel);
-    const aEdge = edgeNames[a.panel]?.[a.edge] || `e${a.edge}`;
-    const bEdge = edgeNames[b.panel]?.[b.edge] || `e${b.edge}`;
-    seams.push(`    S(${aName}.${aEdge}, ${bName}.${bEdge}, plain)`);
+    const aEdge = edgeNames[a.panel]?.[a.edge] || `edge${a.edge}`;
+    const bEdge = edgeNames[b.panel]?.[b.edge] || `edge${b.edge}`;
+    seams.push(`S(${sanitizeName(a.panel)}.${aEdge}, ${sanitizeName(b.panel)}.${bEdge}, plain)`);
   }
 
-  // Find open edges (not in any stitch)
   const openEdges = findOpenEdges(panels, stitches, edgeNames);
-  const openings = [];
-  for (const { panel, edgeIdx, edgeName } of openEdges) {
-    const gnlName = sanitizeName(panel);
-    // Infer opening type from edge name
-    const openingType = inferOpeningType(edgeName, panel, garmentType);
-    if (openingType) {
-      openings.push(`  ${openingType.name} = O(${openingType.location}, ${openingType.shape}, ${openingType.size})`);
+  const openings = collectOpenings(panels, openEdges, garmentType, scale);
+
+  return assembleGNL({
+    name: sanitizeName(templateName),
+    header: provenanceHeader({
+      name: sanitizeName(templateName),
+      source: 'the Korosteleva NeurIPS 2021 dataset',
+      tool: 'converter/convert.js',
+      bilateral: checkSymmetry(panelNames),
+      extra: unresolved.length
+        ? [`Panels whose edges do not form one closed ring, emitted without geometry: ${unresolved.join(', ')}.`]
+        : [],
+    }),
+    declarations,
+    openings,
+    seams,
+  });
+}
+
+/**
+ * Lay out the GNL document.
+ * @param {{ name: string, header: string, declarations: string[],
+ *           openings: {name: string, location: string, shape: string, circumference: number}[],
+ *           seams: string[] }} parts
+ */
+export function assembleGNL(parts) {
+  let gnl = parts.header + '\n\n';
+  gnl += `GARMENT ${parts.name} {\n\n`;
+
+  gnl += `  -- Panels\n`;
+  gnl += parts.declarations.join('\n') + '\n';
+
+  if (parts.openings.length > 0) {
+    gnl += `\n  -- Openings (circumference measured from the unstitched edges)\n`;
+    for (const o of parts.openings) {
+      gnl += `  ${o.name} = O(${o.location}, ${o.shape}, ${o.circumference}cm)\n`;
     }
   }
 
-  // Deduplicate openings (multiple open edges may map to same opening)
-  const uniqueOpenings = [...new Set(openings)];
-
-  // Assemble GNL
-  let gnl = `GARMENT ${sanitizeName(templateName)}${flags} {\n\n`;
-
-  // Panels
-  gnl += `  -- Panels\n`;
-  gnl += declarations.join('\n') + '\n\n';
-
-  // Openings
-  if (uniqueOpenings.length > 0) {
-    gnl += `  -- Openings\n`;
-    gnl += uniqueOpenings.join('\n') + '\n\n';
-  }
-
-  // Build order
-  if (seams.length > 0) {
-    gnl += `  -- Build order\n`;
+  if (parts.seams.length > 0) {
+    gnl += `\n  -- Stitches, in dataset order\n`;
     gnl += `  BUILD:\n`;
-    gnl += seams.join('\n    >> ') + '\n';
+    gnl += '    ' + parts.seams.join('\n    >> ') + '\n';
   }
 
-  gnl += '}\n';
-  return gnl;
+  return gnl + '}\n';
 }

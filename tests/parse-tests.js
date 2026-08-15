@@ -477,6 +477,43 @@ TESTS["viewer_fitted_dress"] = `GARMENT fitted_dress [SYM] {
 // but the spec requires `zip(invisible)`. The adapter/integration step will fix the
 // viewer example. This test uses the spec-correct form.
 
+TESTS["poly_outline"] = `-- Literal panel geometry: every curve form, named edges,
+-- and an opening whose circumference is measured rather than body-relative.
+GARMENT measured_bodice {
+
+  FABRIC: M(200gsm, crisp, none, 1.0, woven.plain)
+
+  front = P(%torso.front, poly[
+    (0, 21.11) : neckline_r,
+    (-25, 56.11) : shoulder_r,
+    (-55, 56.11) ~ (0.7, 0.4) : armhole_r,
+    (-65, 6.11) : side_r,
+    (-65, -128.89) ~ arc(10.88, 0, 1) : hem,
+    (65, -128.89) : side_l,
+    (65, 6.11) ~ (0.2, 0.35; 0.5, 0.2) : armhole_l,
+    (55, 56.11) : shoulder_l,
+    (25, 56.11) : neckline_l
+  ], 1.0)
+
+  back = P(%torso.back, poly[
+    (-25, 58.75) ~ (0.5, -0.3) : neckline,
+    (25, 58.75) : shoulder_l,
+    (65, 8.75) : side_l,
+    (65, -126.25) : hem,
+    (-65, -126.25) : side_r,
+    (-65, 8.75) : shoulder_r
+  ], 1.0)
+
+  neck = O(@neck, circle, 45.3cm)
+
+  BUILD:
+    S(front.shoulder_l, back.shoulder_l, plain)
+    >> S(front.shoulder_r, back.shoulder_r, plain)
+    >> S(front.side_l, back.side_l, plain)
+    >> S(front.side_r, back.side_r, plain)
+    >> F(front.hem, 2.5cm, in)
+}`;
+
 // ============================================================================
 // Runner
 // ============================================================================
@@ -658,8 +695,55 @@ if (existsSync(gcdExamplesDir)) {
 }
 
 console.log(`\n${gcdPassed} passed, ${gcdFailed} failed out of ${gcdPassed + gcdFailed} GarmentCodeData converter tests`);
-if (convFailures.length || gcdFailures.length) {
-  const all = [...convFailures, ...gcdFailures];
+
+// ============================================================================
+// Round-trip tests
+//
+// Parsing is a low bar: nonsense parses. These check that a converted document
+// still contains the pattern — every source edge recoverable from the outlines,
+// every stitch recoverable from BUILD, and nothing invented along the way.
+// ============================================================================
+
+console.log('\n--- Round-trip Tests (pattern → GNL → pattern) ---\n');
+
+const { runEvaluation } = await import('../converter/evaluate.js');
+const roundTrip = await runEvaluation();
+const rtFailures = [];
+
+for (const r of roundTrip) {
+  const problems = [];
+  if (r.edgesMatched !== r.edgesTotal) {
+    problems.push(`${r.edgesTotal - r.edgesMatched}/${r.edgesTotal} edges lost`);
+  }
+  if (r.stitchesRecovered !== r.stitchesExpected) {
+    problems.push(`${r.stitchesExpected - r.stitchesRecovered}/${r.stitchesExpected} stitches lost`);
+  }
+  if (r.spurious) problems.push(`${r.spurious} spurious stitches`);
+  if (r.unresolvable) problems.push(`${r.unresolvable} unresolvable edge refs`);
+  if (r.curveMismatches) problems.push(`${r.curveMismatches} curve mismatches`);
+
+  if (problems.length) {
+    console.log(`  FAIL  ${r.name}: ${problems.join(', ')}`);
+    rtFailures.push(r.name);
+  } else {
+    console.log(`  PASS  ${r.name}`);
+  }
+}
+
+const rtTotals = roundTrip.reduce((acc, r) => ({
+  edges: acc.edges + r.edgesTotal,
+  stitches: acc.stitches + r.stitchesExpected,
+  coherent: acc.coherent + r.seamsCoherent,
+  seams: acc.seams + r.seamsTotal,
+}), { edges: 0, stitches: 0, coherent: 0, seams: 0 });
+
+console.log(`\n${roundTrip.length - rtFailures.length} passed, ${rtFailures.length} failed out of ${roundTrip.length} round-trip tests`);
+console.log(`${rtTotals.edges} edges and ${rtTotals.stitches} stitches round-tripped`);
+console.log(`${((rtTotals.coherent / rtTotals.seams) * 100).toFixed(0)}% of seams join edges that agree about what they are ` +
+            `(reported, not asserted — see converter/evaluate.js)`);
+
+if (convFailures.length || gcdFailures.length || rtFailures.length) {
+  const all = [...convFailures, ...gcdFailures, ...rtFailures];
   console.log(`Failed: ${all.join(', ')}`);
   process.exit(1);
 }
